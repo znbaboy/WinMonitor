@@ -1,0 +1,75 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Create a GitHub release with this tag (e.g. v1.0.0). Leave empty to just build.'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - uses: microsoft/setup-msbuild@v2
+
+      - name: Publish portable
+        run: >
+          msbuild WinMonitor.csproj /restore /t:Publish /m
+          /p:Configuration=Release /p:Platform=x64 /p:RuntimeIdentifier=win-x64
+          /p:PublishDir=${{ github.workspace }}\publish\WinMonitor\
+
+      - name: Check output
+        shell: pwsh
+        run: |
+          $d = 'publish/WinMonitor'
+          foreach ($f in 'WinMonitor.exe', 'WinMonitor.pri', 'Microsoft.WindowsAppRuntime.dll', 'LibreHardwareMonitorLib.dll',
+                         'resources/themes/DarkFlat_Classic.json', 'resources/lang/en.json', 'Assets/app.ico', 'LICENSE', 'THIRD-PARTY-NOTICES.txt') {
+            if (-not (Test-Path "$d/$f")) { throw "$f missing from the publish output" }
+          }
+          "{0:N1} MB" -f ((Get-ChildItem $d -Recurse | Measure-Object Length -Sum).Sum / 1MB)
+
+      - name: Launch tests and screenshots
+        shell: powershell
+        run: ./tests/smoke.ps1 -Dir publish/WinMonitor -Shots screenshots
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: screenshots/*.png
+
+      - name: Zip
+        shell: pwsh
+        run: Compress-Archive -Path publish/WinMonitor/* -DestinationPath WinMonitor-portable-x64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WinMonitor-portable-x64
+          path: WinMonitor-portable-x64.zip
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release || github.ref_name }}
+          name: WinMonitor ${{ inputs.release || github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          body: |
+            Portable: unzip anywhere and run `WinMonitor.exe` (asks for administrator rights, needed to read sensors). No install needed; settings stay in the folder.
+          files: WinMonitor-portable-x64.zip

@@ -34,16 +34,16 @@ namespace WinMonitor.UI
                 IsPaneToggleButtonVisible = false,
                 OpenPaneLength = 220,
             };
-            void Add(string key, string text, Symbol icon, Func<UIElement> page)
+            void Add(string key, string text, string glyph, Func<UIElement> page)
             {
                 _pages[key] = page;
-                _nav.MenuItems.Add(new NavigationViewItem { Content = text, Tag = key, Icon = new SymbolIcon(icon) });
+                _nav.MenuItems.Add(new NavigationViewItem { Content = text, Tag = key, Icon = new FontIcon { Glyph = glyph } });
             }
-            Add("Panel", T("Menu.MainFormSettings"), Symbol.ViewAll, PanelPage);
-            Add("Items", T("Menu.MonitorItemDisplay"), Symbol.List, ItemsPage);
-            Add("Alerts", T("Menu.Thresholds"), Symbol.Important, AlertsPage);
-            Add("Hardware", T("Menu.SystemHardwar") is var h && h != "SystemHardwar" ? h : "Hardware", Symbol.Setting, HardwarePage);
-            Add("About", T("Menu.About"), Symbol.Help, AboutPage);
+            Add("Panel", T("Menu.MainFormSettings"), "\uE771", PanelPage);   // Personalize
+            Add("Items", T("Menu.MonitorItemDisplay"), "\uE8FD", ItemsPage);  // BulletedList
+            Add("Alerts", T("Menu.Thresholds"), "\uEA8F", AlertsPage);        // Ringer
+            Add("Hardware", T("Menu.SystemHardwar") is var h && h != "SystemHardwar" ? h : "Hardware", "\uE950", HardwarePage);  // Component
+            Add("About", T("Menu.About"), "\uE946", AboutPage);               // Info
             _nav.SelectionChanged += (_, e) =>
             {
                 if (e.SelectedItem is NavigationViewItem item && item.Tag is string key) _nav.Content = _pages[key]();
@@ -73,33 +73,38 @@ namespace WinMonitor.UI
                 Ui.PageTitle(T("Menu.MainFormSettings")),
 
                 Ui.Section(T("Menu.Appearance")),
-                Ui.Row(T("Menu.Theme"), ThemeRow(c)),
+                Ui.Row(T("Menu.Theme"), ThemeRow(c), "Dark, Light, or follow Windows", "\uE790"),
+                Ui.LinkRow(T("Menu.ThemeEditor"), _app.OpenThemeEditor, "Make your own colours, fonts and spacing", "\uE70F"),
                 Ui.Row(T("Menu.Width"), Ui.NumberUnit(c.PanelWidth, 100, 10000, "px",
-                    v => { c.PanelWidth = (int)v; Save(); _app.ApplyThemeAndLayout(retainData: true); }, 10)),
-                Ui.Row(T("Menu.Opacity"), Ui.Combo(opacities.Select(o => $"{o * 100:0}%"), Array.FindIndex(opacities, o => Math.Abs(o - c.Opacity) < 0.01),
-                    i => { c.Opacity = opacities[i]; Save(); _app.ApplyWindowAttributes(); })),
+                    v => { c.PanelWidth = (int)v; Save(); _app.ApplyThemeAndLayout(retainData: true); }, 10), null, "\uE740"),
                 Ui.Row(T("Menu.Scale"), Ui.NumberUnit(Math.Round(c.UIScale * 100), 10, 1000, "%",
-                    v => { c.UIScale = v / 100.0; Save(); _app.ApplyThemeAndLayout(retainData: true); }, 5)),
-                Ui.Row(T("Menu.ShowTitle"), Ui.Toggle(c.ShowTitle, v => { c.ShowTitle = v; Save(); _app.ApplyThemeAndLayout(retainData: true); })),
+                    v => { c.UIScale = v / 100.0; Save(); _app.ApplyThemeAndLayout(retainData: true); }, 5), null, "\uE8A3"),
+                Ui.Row(T("Menu.Opacity"), Ui.Combo(opacities.Select(o => $"{o * 100:0}%"), Array.FindIndex(opacities, o => Math.Abs(o - c.Opacity) < 0.01),
+                    i => { c.Opacity = opacities[i]; Save(); _app.ApplyWindowAttributes(); }, 120), null, "\uE706"),
+                Ui.Row(T("Menu.ShowTitle"), Ui.Toggle(c.ShowTitle, v => { c.ShowTitle = v; Save(); _app.ApplyThemeAndLayout(retainData: true); }),
+                    "Category names above each group", "\uE8D2"),
 
-                Ui.Section(T("Menu.MainFormSettings")),
-                Ui.Row(T("Menu.HideMainForm"), Ui.Toggle(c.HideMainForm, v => { c.HideMainForm = v; Save(); _app.ApplyVisibility(); })),
-                Ui.Row(T("Menu.TopMost"), Ui.Toggle(c.TopMost, v => { c.TopMost = v; Save(); _app.ApplyWindowAttributes(); })),
-                Ui.Row(T("Menu.ClampToScreen"), Ui.Toggle(c.ClampToScreen, v => { c.ClampToScreen = v; Save(); })),
+                Ui.Section("Behaviour"),
+                Ui.Row(T("Menu.TopMost"), Ui.Toggle(c.TopMost, v => { c.TopMost = v; Save(); _app.ApplyWindowAttributes(); }), null, "\uE718"),
+                Ui.Row(T("Menu.ClampToScreen"), Ui.Toggle(c.ClampToScreen, v => { c.ClampToScreen = v; Save(); }),
+                    "Stop the panel from being dragged off the edge", "\uE7F4"),
                 Ui.Row(T("Menu.ClickThrough"), Ui.Toggle(c.ClickThrough, v => { c.ClickThrough = v; Save(); _app.ApplyWindowAttributes(); }),
-                    "Clicks go to the window underneath. Use the tray icon to reach the menu."),
+                    "Clicks go to the window underneath. Use the tray icon to reach the menu.", "\uE962"),
                 Ui.Row(T("Menu.DoubleClickAction"), Ui.Combo(
                     new[] { T("Menu.ActionSettings"), T("Menu.ActionTaskMgr"), "Nothing" },
                     Math.Max(0, Array.IndexOf(actionIds, c.MainFormDoubleClickAction)),
-                    i => { c.MainFormDoubleClickAction = actionIds[i]; Save(); })),
+                    i => { c.MainFormDoubleClickAction = actionIds[i]; Save(); }, 200), null, "\uE8B0"),
+                Ui.Row(T("Menu.HideMainForm"), Ui.Toggle(c.HideMainForm, v => { c.HideMainForm = v; Save(); _app.ApplyVisibility(); }),
+                    "Keep only the tray icon", "\uED1A"),
 
                 Ui.Section(T("Menu.Devices")),
-                Ui.Row(T("Menu.DevicesInterval"), Ui.NumberUnit(c.HaloPollSeconds, 1, 86400, "s",
-                    v => { c.HaloPollSeconds = (int)v; Save(); }), T("Menu.DevicesHint")),
-                Ui.Row(T("Menu.DevicesPsFullMode"), Ui.Toggle(c.HaloPsBluetoothFullMode, v => { c.HaloPsBluetoothFullMode = v; Save(); }),
-                    T("Menu.DevicesPsFullModeHint")),
-                Ui.Row(T("Menu.DevicesReport"), Ui.Button(T("Menu.DevicesReportCopy"), CopyDeviceReport),
-                    "What each device reader saw, for troubleshooting a device that does not show.")
+                Ui.Group(T("Menu.Devices"), null, "Wireless mouse, keyboard, headset and controller batteries", "\uE772",
+                    Ui.Row(T("Menu.DevicesInterval"), Ui.NumberUnit(c.HaloPollSeconds, 1, 86400, "s",
+                        v => { c.HaloPollSeconds = (int)v; Save(); }), T("Menu.DevicesHint")),
+                    Ui.Row(T("Menu.DevicesPsFullMode"), Ui.Toggle(c.HaloPsBluetoothFullMode, v => { c.HaloPsBluetoothFullMode = v; Save(); }),
+                        T("Menu.DevicesPsFullModeHint")),
+                    Ui.Row(T("Menu.DevicesReport"), Ui.Button(T("Menu.DevicesReportCopy"), CopyDeviceReport),
+                        "What each device reader saw, for troubleshooting a device that does not show."))
             );
         }
 
@@ -108,11 +113,8 @@ namespace WinMonitor.UI
             var keys = new List<string> { ThemeManager.SystemMode };
             keys.AddRange(ThemeManager.GetAvailableThemes());
             var labels = keys.Select(k => k == ThemeManager.SystemMode ? AppHost.SystemThemeLabel : k);
-            var p = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-            p.Children.Add(Ui.Combo(labels, Math.Max(0, keys.FindIndex(k => k.Equals(c.Skin, StringComparison.OrdinalIgnoreCase))),
-                i => _app.SetTheme(keys[i]), 300));
-            p.Children.Add(Ui.Button(T("Menu.ThemeEditor"), _app.OpenThemeEditor));
-            return p;
+            return Ui.Combo(labels, Math.Max(0, keys.FindIndex(k => k.Equals(c.Skin, StringComparison.OrdinalIgnoreCase))),
+                i => _app.SetTheme(keys[i]), 200);
         }
 
         private void CopyDeviceReport()
@@ -148,30 +150,26 @@ namespace WinMonitor.UI
 
             return Ui.Page(
                 Ui.PageTitle(T("Menu.Thresholds")),
-                Ui.Section(T("Menu.AlertTemp")),
-                Ui.Row(T("Menu.AlertTemp"), Ui.Toggle(c.AlertTempEnabled, v => { c.AlertTempEnabled = v; Save(); }),
-                    "A notification when a temperature stays at or above its limit for 5 seconds (then at most every 3 minutes)."),
-                Ui.Row("CPU, GPU and motherboard limit", Ui.NumberUnit(c.AlertTempThreshold, 30, 120, "°C", v => { c.AlertTempThreshold = (int)v; Save(); })),
-                Ui.Row("Disk limit", Ui.NumberUnit(c.AlertDiskTempThreshold, 30, 100, "°C", v => { c.AlertDiskTempThreshold = (int)v; Save(); })),
+                Ui.Section("Notifications"),
+                Ui.Group(T("Menu.AlertTemp"), Ui.Toggle(c.AlertTempEnabled, v => { c.AlertTempEnabled = v; Save(); }),
+                    "When a temperature stays at or above its limit for 5 seconds (then at most every 3 minutes)", "\uE7BA",
+                    Ui.Row("CPU, GPU and motherboard limit", Ui.NumberUnit(c.AlertTempThreshold, 30, 120, "°C", v => { c.AlertTempThreshold = (int)v; Save(); })),
+                    Ui.Row("Disk limit", Ui.NumberUnit(c.AlertDiskTempThreshold, 30, 100, "°C", v => { c.AlertDiskTempThreshold = (int)v; Save(); }))),
+                Ui.Group(T("Menu.AlertBattery"), Ui.Toggle(c.AlertBatteryEnabled, v => { c.AlertBatteryEnabled = v; Save(); }),
+                    "Once when a wireless device drops to the limit, again after it charges", "\uE83F",
+                    Ui.Row(T("Menu.AlertThreshold"), Ui.NumberUnit(c.AlertBatteryThreshold, 0, 100, "%", v => { c.AlertBatteryThreshold = (int)v; Save(); }),
+                        "Rows turn red at the limit and yellow up to 10% above it")),
 
-                Ui.Section(T("Menu.AlertBattery")),
-                Ui.Row(T("Menu.AlertBattery"), Ui.Toggle(c.AlertBatteryEnabled, v => { c.AlertBatteryEnabled = v; Save(); }),
-                    "One notification when a wireless device drops to the limit; again after it charges. Rows turn red at the limit and yellow up to 10% above it."),
-                Ui.Row(T("Menu.AlertThreshold"), Ui.NumberUnit(c.AlertBatteryThreshold, 0, 100, "%", v => { c.AlertBatteryThreshold = (int)v; Save(); })),
-
-                Ui.Section(T("Menu.GeneralHardware")),
+                Ui.Section("Colour thresholds"),
                 Ui.Hint(T("Menu.ThresholdsTips")),
-                Ui.Row(T("Menu.HardwareLoad"), Threshold(c.Thresholds.Load, "%")),
-                Ui.Row(T("Menu.HardwareTemp"), Threshold(c.Thresholds.Temp, "°C")),
-
-                Ui.Section(T("Menu.NetworkDiskSpeed")),
-                Ui.Row(T("Menu.DiskIOSpeed"), Threshold(c.Thresholds.DiskIOMB, "MB/s")),
-                Ui.Row(T("Menu.UploadSpeed"), Threshold(c.Thresholds.NetUpMB, "MB/s")),
-                Ui.Row(T("Menu.DownloadSpeed"), Threshold(c.Thresholds.NetDownMB, "MB/s")),
-
-                Ui.Section(T("Menu.DailyTraffic")),
-                Ui.Row(T("Items.DATA.DayUp"), Threshold(c.Thresholds.DataUpMB, "MB")),
-                Ui.Row(T("Items.DATA.DayDown"), Threshold(c.Thresholds.DataDownMB, "MB"))
+                Ui.Row(T("Menu.HardwareLoad"), Threshold(c.Thresholds.Load, "%"), null, "\uE9D9"),
+                Ui.Row(T("Menu.HardwareTemp"), Threshold(c.Thresholds.Temp, "°C"), null, "\uE7BA"),
+                Ui.Row(T("Menu.DiskIOSpeed"), Threshold(c.Thresholds.DiskIOMB, "MB/s"), null, "\uEDA2"),
+                Ui.Row(T("Menu.UploadSpeed"), Threshold(c.Thresholds.NetUpMB, "MB/s"), null, "\uE898"),
+                Ui.Row(T("Menu.DownloadSpeed"), Threshold(c.Thresholds.NetDownMB, "MB/s"), null, "\uE896"),
+                Ui.Group(T("Menu.DailyTraffic"), null, null, "\uE9F9",
+                    Ui.Row(T("Items.DATA.DayUp"), Threshold(c.Thresholds.DataUpMB, "MB")),
+                    Ui.Row(T("Items.DATA.DayDown"), Threshold(c.Thresholds.DataDownMB, "MB")))
             );
         }
 
@@ -184,7 +182,7 @@ namespace WinMonitor.UI
 
             ComboBox Source(Func<string> get, Action<string> set)
             {
-                var cb = new ComboBox { Width = 320, PlaceholderText = auto };
+                var cb = new ComboBox { Width = 280, PlaceholderText = auto };
                 cb.Items.Add(auto);
                 string cur = get();
                 if (!string.IsNullOrEmpty(cur)) cb.Items.Add(cur);
@@ -194,7 +192,7 @@ namespace WinMonitor.UI
             }
             var disk = Source(() => c.PreferredDisk, v => c.PreferredDisk = v);
             var net = Source(() => c.PreferredNetwork, v => c.PreferredNetwork = v);
-            var gpu = new ComboBox { Width = 320 };
+            var gpu = new ComboBox { Width = 280 };
             gpu.Items.Add(new ComboBoxItem { Content = auto, Tag = "" });
             gpu.SelectedIndex = 0;
             var mobo = Source(() => c.PreferredMoboTemp, v => c.PreferredMoboTemp = v);
@@ -209,36 +207,37 @@ namespace WinMonitor.UI
 
             return Ui.Page(
                 Ui.PageTitle(T("Menu.SystemHardwar") is var sh && sh != "SystemHardwar" ? sh : "System"),
-                Ui.Section(T("Menu.HardwareSettings")),
-                Ui.Row(T("Menu.UseWinPerCounters"), Ui.Toggle(c.UseWinPerCounters, v => { c.UseWinPerCounters = v; Save(); _app.ApplyMonitorLayout(); })),
-                Ui.Row(T("Menu.IgnoreSMBTraffic"), Ui.Toggle(c.IgnoreSmbTraffic, v => { c.IgnoreSmbTraffic = v; Save(); _app.ApplyMonitorLayout(); })),
-                Ui.Row(T("Menu.MemoryDisplayMode"), Ui.Combo(new[] { T("Menu.Percent"), T("Menu.UsedSize") }, c.MemoryDisplayMode,
-                    i => { c.MemoryDisplayMode = i; Save(); _app.ApplyMonitorLayout(); })),
-                Ui.Row(T("Menu.Refresh"), Ui.Combo(rates.Select(r => r + " ms"), Array.IndexOf(rates, c.RefreshMs),
-                    i => { c.RefreshMs = rates[i]; Save(); _app.ApplyThemeAndLayout(retainData: true); })),
-                Ui.Row(T("Menu.DiskSource"), disk),
-                Ui.Row(T("Menu.NetworkSource"), net),
-                Ui.Row(T("Menu.GpuSource"), gpu),
-                Ui.Row(T("Items.MOBO.Temp"), mobo),
-                Ui.Row(T("Items.CPU.Fan"), cpuFan),
-                Ui.Row(T("Items.CPU.Pump"), pump),
-                Ui.Row(T("Items.CASE.Fan"), caseFan),
-
-                Ui.Section(T("Menu.Calibration")),
-                Ui.Hint(T("Menu.CalibrationTip")),
-                Ui.Row(Max("Items.CPU.Power"), Calib(c.RecordedMaxCpuPower, "W", v => c.RecordedMaxCpuPower = v)),
-                Ui.Row(Max("Items.CPU.Clock"), Calib(c.RecordedMaxCpuClock, "MHz", v => c.RecordedMaxCpuClock = v)),
-                Ui.Row(Max("Items.GPU.Power"), Calib(c.RecordedMaxGpuPower, "W", v => c.RecordedMaxGpuPower = v)),
-                Ui.Row(Max("Items.GPU.Clock"), Calib(c.RecordedMaxGpuClock, "MHz", v => c.RecordedMaxGpuClock = v)),
-                Ui.Row(Max("Items.CPU.Fan"), Calib(c.RecordedMaxCpuFan, "RPM", v => c.RecordedMaxCpuFan = v)),
-                Ui.Row(Max("Items.CPU.Pump"), Calib(c.RecordedMaxCpuPump, "RPM", v => c.RecordedMaxCpuPump = v)),
-                Ui.Row(Max("Items.GPU.Fan"), Calib(c.RecordedMaxGpuFan, "RPM", v => c.RecordedMaxGpuFan = v)),
-                Ui.Row(Max("Items.CASE.Fan"), Calib(c.RecordedMaxChassisFan, "RPM", v => c.RecordedMaxChassisFan = v)),
-
                 Ui.Section(T("Menu.SystemSettings")),
                 Ui.Row(T("Menu.AutoStart"), Ui.Toggle(c.AutoStart, v => { c.AutoStart = v; Save(); _app.ApplyAutoStart(); }),
-                    "Starts WinMonitor when you sign in (a scheduled task, so it can run as administrator without a prompt)."),
-                Ui.Row(T("Menu.HideTrayIcon"), Ui.Toggle(c.HideTrayIcon, v => { c.HideTrayIcon = v; Save(); _app.ApplyVisibility(); }))
+                    "When you sign in, without an administrator prompt", "\uE7E8"),
+                Ui.Row(T("Menu.HideTrayIcon"), Ui.Toggle(c.HideTrayIcon, v => { c.HideTrayIcon = v; Save(); _app.ApplyVisibility(); }), null, "\uED1A"),
+
+                Ui.Section(T("Menu.HardwareSettings")),
+                Ui.Row(T("Menu.Refresh"), Ui.Combo(rates.Select(r => r + " ms"), Array.IndexOf(rates, c.RefreshMs),
+                    i => { c.RefreshMs = rates[i]; Save(); _app.ApplyThemeAndLayout(retainData: true); }, 120), "How often the panel updates", "\uE72C"),
+                Ui.Row(T("Menu.MemoryDisplayMode"), Ui.Combo(new[] { T("Menu.Percent"), T("Menu.UsedSize") }, c.MemoryDisplayMode,
+                    i => { c.MemoryDisplayMode = i; Save(); _app.ApplyMonitorLayout(); }, 160), null, "\uE964"),
+                Ui.Row(T("Menu.UseWinPerCounters"), Ui.Toggle(c.UseWinPerCounters, v => { c.UseWinPerCounters = v; Save(); _app.ApplyMonitorLayout(); }),
+                    "Read load, memory, disk and network from Windows", "\uE9D9"),
+                Ui.Row(T("Menu.IgnoreSMBTraffic"), Ui.Toggle(c.IgnoreSmbTraffic, v => { c.IgnoreSmbTraffic = v; Save(); _app.ApplyMonitorLayout(); }),
+                    "Leave out network file sharing", "\uE839"),
+                Ui.Group("Sensor sources", null, "Which disk, network, GPU and fans the panel shows", "\uE950",
+                    Ui.Row(T("Menu.DiskSource"), disk),
+                    Ui.Row(T("Menu.NetworkSource"), net),
+                    Ui.Row(T("Menu.GpuSource"), gpu),
+                    Ui.Row(T("Items.MOBO.Temp"), mobo),
+                    Ui.Row(T("Items.CPU.Fan"), cpuFan),
+                    Ui.Row(T("Items.CPU.Pump"), pump),
+                    Ui.Row(T("Items.CASE.Fan"), caseFan)),
+                Ui.Group(T("Menu.Calibration"), null, T("Menu.CalibrationTip"), "\uE8EF",
+                    Ui.Row(Max("Items.CPU.Power"), Calib(c.RecordedMaxCpuPower, "W", v => c.RecordedMaxCpuPower = v)),
+                    Ui.Row(Max("Items.CPU.Clock"), Calib(c.RecordedMaxCpuClock, "MHz", v => c.RecordedMaxCpuClock = v)),
+                    Ui.Row(Max("Items.GPU.Power"), Calib(c.RecordedMaxGpuPower, "W", v => c.RecordedMaxGpuPower = v)),
+                    Ui.Row(Max("Items.GPU.Clock"), Calib(c.RecordedMaxGpuClock, "MHz", v => c.RecordedMaxGpuClock = v)),
+                    Ui.Row(Max("Items.CPU.Fan"), Calib(c.RecordedMaxCpuFan, "RPM", v => c.RecordedMaxCpuFan = v)),
+                    Ui.Row(Max("Items.CPU.Pump"), Calib(c.RecordedMaxCpuPump, "RPM", v => c.RecordedMaxCpuPump = v)),
+                    Ui.Row(Max("Items.GPU.Fan"), Calib(c.RecordedMaxGpuFan, "RPM", v => c.RecordedMaxGpuFan = v)),
+                    Ui.Row(Max("Items.CASE.Fan"), Calib(c.RecordedMaxChassisFan, "RPM", v => c.RecordedMaxChassisFan = v)))
             );
         }
 
@@ -304,43 +303,38 @@ namespace WinMonitor.UI
         // ================================================================== About
         private UIElement AboutPage()
         {
-            var links = new StackPanel { Spacing = 2 };
-            links.Children.Add(Ui.Link("Source code and releases", AppInfo.RepoUrl));
-            links.Children.Add(Ui.Link("Report a problem", AppInfo.IssuesUrl));
-
-            var credits = new TextBlock
+            var icon = new Microsoft.UI.Xaml.Controls.ImageIcon
             {
-                TextWrapping = TextWrapping.Wrap,
-                Text =
-                    "WinMonitor is free and open-source software (MIT licence).\n\n" +
-                    "Built on:\n" +
-                    "• LiteMonitor by Diorser (MIT): the monitor this app is based on\n" +
-                    "• Halo Battery (MIT): wireless device battery readers\n" +
-                    "• LibreHardwareMonitor (MPL-2.0): sensor readings\n" +
-                    "• Windows App SDK / WinUI 3 (MIT)\n" +
-                    "• WinUIEx by Morten Nielsen (MIT): see-through window technique\n\n" +
-                    "Optional download, from its official release only:\n" +
-                    "• PawnIO driver (namazso): CPU temperature, clock and power\n\n" +
-                    "Full licence texts: THIRD-PARTY-NOTICES.txt next to WinMonitor.exe.",
+                Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "logo.png"))),
             };
+            var app = new CommunityToolkit.WinUI.Controls.SettingsExpander
+            {
+                Header = "WinMonitor",
+                Description = "Hardware monitor with wireless device batteries. Free and open source (MIT).",
+                HeaderIcon = icon,
+                Content = new TextBlock { Text = AppInfo.Version, Foreground = Ui.Res("TextFillColorSecondaryBrush"), IsTextSelectionEnabled = true },
+                IsExpanded = true,
+            };
+            app.Items.Add(Ui.Row("Source code and releases", Ui.Link("GitHub", AppInfo.RepoUrl)));
+            app.Items.Add(Ui.Row("Report a problem", Ui.Link("Issues", AppInfo.IssuesUrl)));
+
+            FrameworkElement Credit(string name, string what, string licence) => Ui.Row(name,
+                new TextBlock { Text = licence, Foreground = Ui.Res("TextFillColorSecondaryBrush") }, what);
 
             return Ui.Page(
                 Ui.PageTitle(T("Menu.About")),
-                Ui.Card(new StackPanel
-                {
-                    Spacing = 4,
-                    Children =
-                    {
-                        new TextBlock { Text = "⚡ WinMonitor", Style = (Style)Application.Current.Resources["SubtitleTextBlockStyle"] },
-                        new TextBlock { Text = "Version " + AppInfo.Version, Foreground = Ui.Res("TextFillColorSecondaryBrush") },
-                        new TextBlock { Text = "Hardware monitor with wireless device batteries. Portable: settings are kept next to the app.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 4) },
-                        links,
-                    }
-                }, new Thickness(16)),
+                app,
                 Ui.Section("Credits"),
-                Ui.Card(credits, new Thickness(16)),
+                Ui.Group("Open-source components", null, "Full licence texts are in THIRD-PARTY-NOTICES.txt next to WinMonitor.exe", "\uE8F1",
+                    Credit("LiteMonitor", "The monitor this app is based on (Diorser)", "MIT"),
+                    Credit("Halo Battery", "Wireless device battery readers", "MIT"),
+                    Credit("LibreHardwareMonitor", "Sensor readings", "MPL-2.0"),
+                    Credit("Windows App SDK / WinUI 3", "User interface", "MIT"),
+                    Credit("Windows Community Toolkit", "Settings cards", "MIT"),
+                    Credit("WinUIEx", "See-through window technique (Morten Nielsen)", "MIT"),
+                    Credit("PawnIO", "Optional driver for CPU temperature, clock and power (namazso)", "Official release")),
                 Ui.Section(T("Menu.Reset")),
-                Ui.Row(T("Menu.Reset"), Ui.Button(T("Menu.Reset") + "…", ResetSettings), "Deletes settings.json and restarts WinMonitor with the defaults.")
+                Ui.Row(T("Menu.Reset"), Ui.Button(T("Menu.Reset") + "…", ResetSettings), "Deletes settings.json and restarts WinMonitor with the defaults.", "\uE777")
             );
         }
 

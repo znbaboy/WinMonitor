@@ -11,6 +11,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Windows.Graphics;
 using WinMonitor.Core;
+using CommunityToolkit.WinUI.Controls;
 
 namespace WinMonitor.UI
 {
@@ -132,27 +133,34 @@ namespace WinMonitor.UI
             Margin = new Thickness(0, 0, 0, 2),
         };
 
-        /// <summary>A settings row: title (and optional description) left, control right.</summary>
-        public static Border Row(string title, FrameworkElement control, string? description = null)
+        /// <summary>A Windows 11 settings card: optional icon, title and description left, control right.</summary>
+        public static SettingsCard Row(string title, FrameworkElement control, string? description = null, string? glyph = null)
         {
-            var g = new Grid { ColumnSpacing = 16, MinHeight = 44 };
-            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-            text.Children.Add(new TextBlock { Text = title, TextWrapping = TextWrapping.Wrap });
-            if (!string.IsNullOrEmpty(description))
-                text.Children.Add(new TextBlock
-                {
-                    Text = description,
-                    TextWrapping = TextWrapping.Wrap,
-                    Foreground = Res("TextFillColorSecondaryBrush"),
-                    Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
-                });
-            g.Children.Add(text);
-            control.VerticalAlignment = VerticalAlignment.Center;
-            Grid.SetColumn(control, 1);
-            g.Children.Add(control);
-            return Card(g);
+            var card = new SettingsCard { Header = title, Content = control };
+            if (!string.IsNullOrEmpty(description)) card.Description = description;
+            if (glyph != null) card.HeaderIcon = new FontIcon { Glyph = glyph };
+            return card;
+        }
+
+        /// <summary>A Windows 11 settings group that folds out: header card with an optional control, child cards below.</summary>
+        public static SettingsExpander Group(string title, FrameworkElement? control, string? description, string? glyph, params FrameworkElement[] items)
+        {
+            var ex = new SettingsExpander { Header = title, Content = control };
+            if (!string.IsNullOrEmpty(description)) ex.Description = description;
+            if (glyph != null) ex.HeaderIcon = new FontIcon { Glyph = glyph };
+            foreach (var i in items) ex.Items.Add(i);
+            return ex;
+        }
+
+        /// <summary>A clickable settings card (chevron on the right), like a link to another page.</summary>
+        public static SettingsCard LinkRow(string title, Action click, string? description = null, string? glyph = null)
+        {
+            var card = Row(title, null!, description, glyph);
+            card.Content = null;
+            card.IsClickEnabled = true;
+            card.ActionIcon = new FontIcon { Glyph = "\uE8A7" };   // opens a window
+            card.Click += (_, _) => click();
+            return card;
         }
 
         public static ToggleSwitch Toggle(bool value, Action<bool> changed)

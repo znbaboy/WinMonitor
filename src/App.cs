@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
@@ -10,7 +11,12 @@ namespace WinMonitor
     /// <summary>The WinUI application (built in code, no XAML files).</summary>
     public sealed class App : Application, IXamlMetadataProvider
     {
-        private readonly Microsoft.UI.Xaml.XamlTypeInfo.XamlControlsXamlMetaDataProvider _provider = new();
+        // XAML type info: WinUI controls, plus the Community Toolkit settings cards (Windows 11 Settings look)
+        private readonly IXamlMetadataProvider[] _providers =
+        {
+            new Microsoft.UI.Xaml.XamlTypeInfo.XamlControlsXamlMetaDataProvider(),
+            new CommunityToolkit.WinUI.Controls.SettingsControlsRns.CommunityToolkit_WinUI_Controls_SettingsControls_XamlTypeInfo.XamlMetaDataProvider(),
+        };
         private AppHost? _host;
 
         public App()
@@ -35,8 +41,18 @@ namespace WinMonitor
             Current.Resources.MergedDictionaries.Add(new XamlControlsResources());
         }
 
-        public IXamlType GetXamlType(Type type) => _provider.GetXamlType(type);
-        public IXamlType GetXamlType(string fullName) => _provider.GetXamlType(fullName);
-        public XmlnsDefinition[] GetXmlnsDefinitions() => _provider.GetXmlnsDefinitions();
+        public IXamlType GetXamlType(Type type)
+        {
+            foreach (var p in _providers) { var t = p.GetXamlType(type); if (t != null) return t; }
+            return null!;
+        }
+
+        public IXamlType GetXamlType(string fullName)
+        {
+            foreach (var p in _providers) { var t = p.GetXamlType(fullName); if (t != null) return t; }
+            return null!;
+        }
+
+        public XmlnsDefinition[] GetXmlnsDefinitions() => _providers.SelectMany(p => p.GetXmlnsDefinitions()).ToArray();
     }
 }

@@ -100,9 +100,9 @@ namespace WinMonitor.UI
             var L = _theme.Layout;
             var F = _theme.Font;
             var C = _theme.Color;
-            Border Num(string title, int value, Action<int> set, int max = 200) =>
+            FrameworkElement Num(string title, int value, Action<int> set, int max = 200) =>
                 Ui.Row(title, Ui.NumberUnit(value, 0, max, "px", v => { set((int)v); Changed(); }));
-            Border Pt(string title, double value, Action<double> set) =>
+            FrameworkElement Pt(string title, double value, Action<double> set) =>
                 Ui.Row(title, Ui.NumberUnit(value, 4, 72, "pt", v => { set(v); Changed(); }, 0.5));
 
             var page = Ui.Page(
@@ -168,7 +168,7 @@ namespace WinMonitor.UI
             return cb;
         }
 
-        private Border ColorRow(string title, string value, Action<string> set)
+        private FrameworkElement ColorRow(string title, string value, Action<string> set)
         {
             var swatch = new Border { Width = 24, Height = 24, CornerRadius = new CornerRadius(4), BorderThickness = new Thickness(1), BorderBrush = Ui.Res("ControlStrokeColorDefaultBrush") };
             var hex = new TextBox { Text = value, Width = 120, FontFamily = new FontFamily("Consolas") };

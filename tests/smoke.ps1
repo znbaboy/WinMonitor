@@ -231,6 +231,8 @@ if ($p) {
 $env:WINMONITOR_EXPAND_ALL = $null; $env:WINMONITOR_TRACE = $null; Remove-Item "$Dir\WinMonitor_Trace.log" -ErrorAction SilentlyContinue
 $p = Start-App $null @('--open', 'settings:Hardware')
 if ($p) { Start-Sleep 5; Window $p 'Settings - WinMonitor' 'settings-hardware' }
+$p = Start-App $null @('--open', 'settings:Alerts')
+if ($p) { Window $p 'Settings - WinMonitor' 'settings-alerts' }
 $p = Start-App $null @('--open', 'settings:About')
 if ($p) { Window $p 'Settings - WinMonitor' 'settings-about' }
 $p = Start-App $null @('--open', 'history')

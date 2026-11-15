@@ -83,6 +83,13 @@ namespace WinMonitor.UI
                         DpiChanged?.Invoke();
                         StripFrame();
                         Native.SetCorners(Hwnd, 1);
+                        // the panel was rescaled for the new monitor: put it back where it was saved
+                        // (startup / display change) or at least keep it on screen
+                        if (!_pressed)
+                        {
+                            if (DateTime.UtcNow < _restoreUntil) PlaceAtSaved();
+                            else ClampToScreen(false);
+                        }
                     });
                 }
                 return null;
@@ -280,7 +287,20 @@ namespace WinMonitor.UI
             _cfg.Save();
         }
 
+        private DateTime _restoreUntil;
+
+        /// <summary>
+        /// Moves the panel to its saved place. Moving onto a monitor with a different scale makes
+        /// WinUI rescale the panel afterwards, so placement runs again once that has settled.
+        /// </summary>
         public void RestorePosition()
+        {
+            _restoreUntil = DateTime.UtcNow.AddSeconds(3);
+            PlaceAtSaved();
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, PlaceAtSaved);
+        }
+
+        private void PlaceAtSaved()
         {
             var b = Native.Bounds(Hwnd);
             int w = b.Width, h = b.Height;

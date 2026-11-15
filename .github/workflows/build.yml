@@ -43,6 +43,7 @@ jobs:
           $d = 'publish/WinMonitor'
           $files = Get-ChildItem $d -File | ForEach-Object Name
           "Publish output: $($files -join ', ')"
+          Get-ChildItem bin, obj -Recurse -Filter *.pri | ForEach-Object { "PRI: $($_.FullName) $($_.Length)" }
           if (-not (Test-Path "$d/WinMonitor.exe")) { throw 'WinMonitor.exe missing from the publish output' }
           if ($files.Count -ne 1) { throw "expected only WinMonitor.exe, found: $($files -join ', ')" }
           "{0:N1} MB" -f ((Get-ChildItem $d -Recurse | Measure-Object Length -Sum).Sum / 1MB)

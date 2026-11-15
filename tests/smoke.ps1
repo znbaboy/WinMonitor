@@ -147,6 +147,7 @@ if ($p) {
   Start-Sleep 50
   $pws = (Get-Counter '\Process(WinMonitor)\Working Set - Private').CounterSamples[0].CookedValue / 1MB
   $proc = Get-Process WinMonitor | Select-Object -First 1
+  Get-ChildItem "$env:TEMP\.net" -Recurse -Include *.pri,*.xbf -ErrorAction SilentlyContinue | ForEach-Object { "UNPACKED: $($_.FullName) $($_.Length)" } | Write-Host
   "MEMORY: private working set {0:N1} MB, working set {1:N1} MB, private bytes {2:N1} MB" -f $pws, ($proc.WorkingSet64 / 1MB), ($proc.PrivateMemorySize64 / 1MB) | Write-Host
   if ($pws -gt 45) { Fail ("private working set {0:N1} MB is above 45 MB" -f $pws) } else { Ok ("memory {0:N1} MB" -f $pws) }
 }

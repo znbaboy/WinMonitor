@@ -19,6 +19,9 @@
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <!-- resources.pri (control styles, settings cards) embedded in the exe; there are no XAML files to switch it on -->
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <AppxGeneratePriEnabled>true</AppxGeneratePriEnabled>
     <PublishTrimmed>false</PublishTrimmed>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -58,13 +61,4 @@
     <None Remove="tests\**" />
   </ItemGroup>
 
-  <!-- The app's resource index (control styles, settings cards) is not a publish item: bundle it into the exe -->
-  <Target Name="BundleAppPri" AfterTargets="ComputeResolvedFilesToPublishList">
-    <ItemGroup>
-      <ResolvedFileToPublish Include="$(OutDir)$(TargetName).pri" Condition="Exists('$(OutDir)$(TargetName).pri')">
-        <RelativePath>$(TargetName).pri</RelativePath>
-        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-      </ResolvedFileToPublish>
-    </ItemGroup>
-  </Target>
 </Project>

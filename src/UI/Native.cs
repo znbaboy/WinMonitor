@@ -91,6 +91,11 @@ namespace WinMonitor.UI
         {
             try
             {
+                if (preference == 1)
+                {
+                    int disabled = 1;   // DWMNCRP_DISABLED: no frame, border line or shadow from Windows
+                    DwmSetWindowAttribute(h, 2 /* DWMWA_NCRENDERING_POLICY */, ref disabled, 4);
+                }
                 DwmSetWindowAttribute(h, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */, ref preference, 4);
                 int none = unchecked((int)0xFFFFFFFE);
                 DwmSetWindowAttribute(h, 34 /* DWMWA_BORDER_COLOR */, ref none, 4);

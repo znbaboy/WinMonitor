@@ -172,6 +172,7 @@ namespace WinMonitor.UI
         {
             if (activate) Activate();
             else Native.ShowWindow(Hwnd, Native.SW_SHOWNOACTIVATE);
+            Native.SetCorners(Hwnd, 1);   // Windows can restore the frame when the window is first shown
             RefreshTopMost(true);
             KeepVisible(3);
         }

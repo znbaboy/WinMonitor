@@ -240,7 +240,7 @@ if ($p) { Window $p 'Monitor History' 'history' }
 $p = Start-App $null @('--open', 'hardware')
 if ($p) { Window $p 'Hardware Info' 'hardware-info' }
 $p = Start-App $null @('--open', 'themes')
-if ($p) { Window $p 'Theme Editor' 'theme-editor' }
+if ($p) { Window $p 'Theme editor' 'theme-editor' }
 Stop-App
 
 # ---------------------------------------------------------------- 6. errors

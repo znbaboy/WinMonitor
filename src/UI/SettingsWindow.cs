@@ -147,7 +147,7 @@ namespace WinMonitor.UI
             // header: group name, all on/off, order
             string defName = LanguageManager.GetOriginal("Groups." + key);
             if (defName.StartsWith("Groups.")) defName = key;
-            var alias = new TextBox { Text = _cfg.GroupAliases.TryGetValue(key, out var a) ? a : defName, Width = 180, FontWeight = Ui.Bold };
+            var alias = new TextBox { Text = _cfg.GroupAliases.TryGetValue(key, out var a) ? a : defName, Width = 170, FontWeight = Ui.Bold };
             CommitOnEnterOrLeave(alias, () =>
             {
                 string v = alias.Text.Trim();
@@ -173,7 +173,7 @@ namespace WinMonitor.UI
 
             string resolved = MetricLabelResolver.ResolveLabel(item);
             string defName = T(UIUtils.Intern("Items." + item.Key));
-            var name = new TextBox { Text = !string.IsNullOrEmpty(resolved) ? resolved : defName, Width = 180 };
+            var name = new TextBox { Text = !string.IsNullOrEmpty(resolved) ? resolved : defName, Width = 170 };
             CommitOnEnterOrLeave(name, () =>
             {
                 // a single space hides the name; the built-in or live name means "automatic"
@@ -191,7 +191,7 @@ namespace WinMonitor.UI
 
             // unit: empty = automatic, spaces = none, anything else = custom format ({u} = the automatic unit)
             string defUnit = MetricUtils.GetUnitStr(item.Key, 0, MetricUtils.UnitContext.SettingsPanel);
-            var unit = new TextBox { Text = item.UnitPanel == null ? defUnit : (item.UnitPanel == "" ? " " : item.UnitPanel), Width = 90 };
+            var unit = new TextBox { Text = item.UnitPanel == null ? defUnit : (item.UnitPanel == "" ? " " : item.UnitPanel), Width = 80 };
             CommitOnEnterOrLeave(unit, () =>
             {
                 string raw = unit.Text;
@@ -217,8 +217,8 @@ namespace WinMonitor.UI
 
         private static Grid RowGrid(FrameworkElement key, FrameworkElement name, FrameworkElement? unit, FrameworkElement show, FrameworkElement? bar, FrameworkElement arrows)
         {
-            var g = new Grid { ColumnSpacing = 12, MinHeight = 40 };
-            foreach (var w in new[] { 130.0, 190, 100, 90, 80 }) g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(w) });
+            var g = new Grid { ColumnSpacing = 8, MinHeight = 40 };
+            foreach (var w in new[] { 112.0, 170, 80, 84, 72 }) g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(w) });
             g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             var cells = new[] { key, name, unit, show, bar, arrows };
             for (int i = 0; i < cells.Length; i++)

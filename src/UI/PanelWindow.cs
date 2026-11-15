@@ -63,6 +63,13 @@ namespace WinMonitor.UI
             AppWindow.IsShownInSwitchers = false;
             AppWindow.SetIcon(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "app.ico"));
 
+            // plain popup: no caption, frame or border lines
+            long st = Native.Style(Hwnd);
+            st &= ~(Native.WS_CAPTION | Native.WS_THICKFRAME | Native.WS_SYSMENU | Native.WS_MINIMIZEBOX | Native.WS_MAXIMIZEBOX | 0x00800000L /* WS_BORDER */);
+            Native.SetStyle(Hwnd, st | Native.WS_POPUP);
+            Native.SetWindowPos(Hwnd, IntPtr.Zero, 0, 0, 0, 0,
+                Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOZORDER | Native.SWP_NOACTIVATE | Native.SWP_FRAMECHANGED);
+
             // tool window: no taskbar button
             long ex = Native.ExStyle(Hwnd);
             Native.SetExStyle(Hwnd, (ex | Native.WS_EX_TOOLWINDOW) & ~Native.WS_EX_APPWINDOW);

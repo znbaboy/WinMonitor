@@ -1,9 +1,9 @@
-# ⚡ WinMonitor
+<img src="docs/logo.png" width="72" align="left" alt="">
+
+# WinMonitor
 
 A small always-on-top hardware monitor for Windows, with **wireless device batteries** built in.
 Free and open source (MIT). Built with WinUI 3. Portable: unzip and run.
-
-![WinMonitor](docs/screenshot.png)
 
 ## Features
 

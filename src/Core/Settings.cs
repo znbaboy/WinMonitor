@@ -9,7 +9,7 @@ namespace WinMonitor
     {
         // ====== 基础设置 ======
         public string Skin { get; set; } = "System";   // System (follow Windows), Light or Dark
-        public bool TopMost { get; set; } = true;
+        public bool TopMost { get; set; } = false;
         public bool AutoStart { get; set; } = false;
         public int RefreshMs { get; set; } = 1000;
         public double AnimationSpeed { get; set; } = 0.35;

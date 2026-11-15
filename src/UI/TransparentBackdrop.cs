@@ -26,6 +26,16 @@ namespace WinMonitor.UI
             _hook.Add((msg, w, l) =>
             {
                 if (msg == Native.WM_ERASEBKGND && ClearBackground(hwnd, w)) return (IntPtr)1;
+                if (msg == 0x000F /* WM_PAINT */)
+                {
+                    // anything the panel does not cover stays see-through (black is transparent here), never white
+                    var ps = new byte[72];
+                    var dc = BeginPaint(hwnd, ps);
+                    ClearBackground(hwnd, dc);
+                    EndPaint(hwnd, ps);
+                    return IntPtr.Zero;
+                }
+                if (msg == Native.WM_DPICHANGED) ConfigureDwm(hwnd);
                 if (msg == Native.WM_DWMCOMPOSITIONCHANGED) { ConfigureDwm(hwnd); return IntPtr.Zero; }
                 return null;
             });
@@ -75,6 +85,9 @@ namespace WinMonitor.UI
                 return _compositor;
             }
         }
+
+        [DllImport("user32.dll")] private static extern IntPtr BeginPaint(IntPtr hwnd, byte[] ps);
+        [DllImport("user32.dll")] private static extern bool EndPaint(IntPtr hwnd, byte[] ps);
 
         [StructLayout(LayoutKind.Sequential)]
         private struct DispatcherQueueOptions { public int dwSize, threadType, apartmentType; }

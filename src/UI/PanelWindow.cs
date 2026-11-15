@@ -80,14 +80,23 @@ namespace WinMonitor.UI
             View.Root.PointerPressed += OnPointerPressed;
             View.Root.PointerMoved += OnPointerMoved;
             View.Root.PointerReleased += OnPointerReleased;
-            View.Root.PointerCaptureLost += (_, _) => EndDrag(false);
+            View.Root.PointerCaptureLost += (_, _) => EndDrag(true);
             View.Root.RightTapped += (_, e) => { e.Handled = true; MenuRequested?.Invoke(); };
             View.Root.DoubleTapped += (_, e) => { e.Handled = true; DoubleClicked?.Invoke(); };
 
             Hook.Add((msg, w, l) =>
             {
                 if (msg == Native.WM_DISPLAYCHANGE) { _displayTimer!.Stop(); _displayTimer.Start(); }   // restore position after the screens settle
-                if (msg == Native.WM_DPICHANGED) DpiChanged?.Invoke();
+                if (msg == Native.WM_DPICHANGED)
+                {
+                    // let WinUI rescale first, then fit the window to the panel again and drop any frame Windows brought back
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        _widthPx = _heightPx = 0;
+                        DpiChanged?.Invoke();
+                        Native.SetCorners(Hwnd, 1);
+                    });
+                }
                 return null;
             });
 
@@ -197,15 +206,24 @@ namespace WinMonitor.UI
             var c = Native.Cursor();
             int dx = c.X - _dragCursor.X, dy = c.Y - _dragCursor.Y;
             if (dx == 0 && dy == 0) return;
-            Native.Move(Hwnd, _dragWindow.X + dx, _dragWindow.Y + dy);
+            int x = _dragWindow.X + dx, y = _dragWindow.Y + dy;
+            if (_cfg.ClampToScreen)
+            {
+                // keep the whole panel inside the work area of the monitor under the cursor
+                var b = Native.Bounds(Hwnd);
+                var area = Native.ScreenFromPoint(c.X, c.Y).WorkArea;
+                x = Math.Max(area.Left, Math.Min(x, area.Right - b.Width));
+                y = Math.Max(area.Top, Math.Min(y, area.Bottom - b.Height));
+            }
+            Native.Move(Hwnd, x, y);
             _hidden = false;
             _dock = Edge.None;
         }
 
         private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
         {
+            EndDrag(true);   // before releasing: releasing raises PointerCaptureLost
             View.Root.ReleasePointerCapture(e.Pointer);
-            EndDrag(true);
         }
 
         private void EndDrag(bool save)
@@ -299,20 +317,26 @@ namespace WinMonitor.UI
             KeepVisible(3);
         }
 
+        private static bool OtherScreenAt(Native.Screen current, int x, int y) =>
+            Native.AllScreens().Any(s => s.DeviceName != current.DeviceName && s.Bounds.Contains(x, y));
+
         private void CheckAutoHide()
         {
             if (!_cfg.AutoHide || !IsVisible || _pressed || PopupMenu.IsOpen) return;
             if (DateTime.Now < _keepVisibleUntil) return;
 
             var b = Native.Bounds(Hwnd);
-            var area = Native.ScreenFromPoint(b.Left + b.Width / 2, b.Top + b.Height / 2).WorkArea;
+            var screen = Native.ScreenFromPoint(b.Left + b.Width / 2, b.Top + b.Height / 2);
+            var area = screen.WorkArea;
             var c = Native.Cursor();
 
             if (!_hidden)
             {
-                bool nearLeft = b.Left <= area.Left + HideThreshold;
-                bool nearRight = area.Right - b.Right <= HideThreshold;
-                bool nearTop = b.Top <= area.Top + HideThreshold;
+                // only edges with no other monitor behind them (otherwise the panel would land on that monitor)
+                int midX = b.Left + b.Width / 2, midY = b.Top + b.Height / 2;
+                bool nearLeft = b.Left <= area.Left + HideThreshold && !OtherScreenAt(screen, screen.Bounds.Left - 2, midY);
+                bool nearRight = area.Right - b.Right <= HideThreshold && !OtherScreenAt(screen, screen.Bounds.Right + 1, midY);
+                bool nearTop = b.Top <= area.Top + HideThreshold && !OtherScreenAt(screen, midX, screen.Bounds.Top - 2);
                 if ((nearLeft || nearRight || nearTop) && !b.Contains(c.X, c.Y))
                 {
                     if (nearRight) { Native.Move(Hwnd, area.Right - HideStrip, b.Top); _dock = Edge.Right; }

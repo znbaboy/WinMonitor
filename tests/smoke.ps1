@@ -97,7 +97,7 @@ if ($p) {
     $ex = [W]::GetWindowLong($h, -20)
     if (($r.R - $r.L) -lt 100 -or ($r.B - $r.T) -lt 100) { Fail "panel too small: $($r.R - $r.L)x$($r.B - $r.T)" } else { Ok "panel $($r.R - $r.L)x$($r.B - $r.T)" }
     if (($ex -band 0x80) -eq 0) { Fail 'panel is not a tool window (would show in the taskbar)' } else { Ok 'tool window' }
-    if (($ex -band 0x8) -eq 0) { Fail 'panel is not always on top' } else { Ok 'always on top' }
+    if (($ex -band 0x8) -ne 0) { Fail 'panel is always on top, but that is off by default' } else { Ok 'not on top by default' }
     Shot $h 'panel-default' 24
   }
 

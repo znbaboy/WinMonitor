@@ -160,7 +160,7 @@ namespace WinMonitor.UI
                     Ui.Row(T("Menu.AlertThreshold"), Ui.NumberUnit(c.AlertBatteryThreshold, 0, 100, "%", v => { c.AlertBatteryThreshold = (int)v; Save(); }),
                         "Rows turn red at the limit and yellow up to 10% above it")),
 
-                Ui.Section("Colour thresholds"),
+                Ui.Section("Colours"),
                 Ui.Hint(T("Menu.ThresholdsTips")),
                 Ui.Row(T("Menu.HardwareLoad"), Threshold(c.Thresholds.Load, "%"), null, "\uE9D9"),
                 Ui.Row(T("Menu.HardwareTemp"), Threshold(c.Thresholds.Temp, "°C"), null, "\uE7BA"),
@@ -220,7 +220,7 @@ namespace WinMonitor.UI
                 Ui.Row(T("Menu.UseWinPerCounters"), Ui.Toggle(c.UseWinPerCounters, v => { c.UseWinPerCounters = v; Save(); _app.ApplyMonitorLayout(); }),
                     "Read load, memory, disk and network from Windows", "\uE9D9"),
                 Ui.Row(T("Menu.IgnoreSMBTraffic"), Ui.Toggle(c.IgnoreSmbTraffic, v => { c.IgnoreSmbTraffic = v; Save(); _app.ApplyMonitorLayout(); }),
-                    "Leave out network file sharing", "\uE839"),
+                    "Leave out network file copies (SMB) from the network speed", "\uE839"),
                 Ui.Group("Sensor sources", null, "Which disk, network, GPU and fans the panel shows", "\uE950",
                     Ui.Row(T("Menu.DiskSource"), disk),
                     Ui.Row(T("Menu.NetworkSource"), net),

@@ -309,28 +309,34 @@ namespace WinMonitor.UI
             {
                 if (_drag != row) return;
                 e.Handled = true;
+                AutoScroll(e);
+
+                // keep the row inside the list
+                double top0 = row.ActualOffset.Y;
                 double dy = e.GetCurrentPoint(this).Position.Y - _startY;
+                dy = Math.Max(-top0, Math.Min(dy, ActualHeight - row.ActualHeight - top0));
                 Shift(row).Y = dy;
 
-                // where the dragged row's centre now falls
-                double centre = row.ActualOffset.Y + row.ActualHeight / 2 + dy;
-                int to = _from;
-                for (int i = _from + 1; i < Children.Count; i++)
+                // Drop slot: judged by the dragged row's top (its header, under the pointer), against the
+                // middles of the other rows laid out as if the dragged one were gone. Works the same up and
+                // down, however tall the dragged card is.
+                double probe = top0 + dy + Math.Min(row.ActualHeight, 40) / 2;
+                double y = 0;
+                int to = 0;
+                for (int i = 0; i < Children.Count; i++)
                 {
+                    if (i == _from) continue;
                     var c = (FrameworkElement)Children[i];
-                    if (centre > c.ActualOffset.Y + c.ActualHeight / 2) to = i;
+                    if (probe > y + c.ActualHeight / 2) to++;
+                    y += c.ActualHeight + Spacing;
                 }
-                for (int i = _from - 1; i >= 0; i--)
-                {
-                    var c = (FrameworkElement)Children[i];
-                    if (centre < c.ActualOffset.Y + c.ActualHeight / 2) to = i;
-                }
+
                 // the rows in between slide one place to make room
                 for (int i = 0; i < Children.Count; i++)
                 {
                     if (i == _from) continue;
-                    double y = (i > _from && i <= to) ? -_step : (i < _from && i >= to) ? _step : 0;
-                    Shift(Children[i]).Y = y;
+                    double shift = (i > _from && i <= to) ? -_step : (i < _from && i >= to) ? _step : 0;
+                    Shift(Children[i]).Y = shift;
                 }
                 if (to != _to) Trace($"move dy={dy:0} to={to}");
                 _to = to;
@@ -338,6 +344,18 @@ namespace WinMonitor.UI
             handle.PointerReleased += (_, e) => { if (_drag == row) { e.Handled = true; Finish(); handle.ReleasePointerCapture(e.Pointer); } };
             handle.PointerCaptureLost += (_, _) => { if (_drag == row) Finish(); };
             handle.PointerCanceled += (_, _) => { if (_drag == row) Finish(); };
+        }
+
+        /// <summary>Scrolls the page when dragging near its top or bottom edge.</summary>
+        private void AutoScroll(PointerRoutedEventArgs e)
+        {
+            DependencyObject? p = this;
+            while (p != null && p is not ScrollViewer) p = VisualTreeHelper.GetParent(p);
+            if (p is not ScrollViewer sv) return;
+            double y = e.GetCurrentPoint(sv).Position.Y;
+            const double edge = 48;
+            if (y < edge) sv.ChangeView(null, Math.Max(0, sv.VerticalOffset - (edge - y) / 2), null, true);
+            else if (y > sv.ViewportHeight - edge) sv.ChangeView(null, sv.VerticalOffset + (y - (sv.ViewportHeight - edge)) / 2, null, true);
         }
 
         private void Finish()

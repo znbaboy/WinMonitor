@@ -114,7 +114,7 @@ namespace WinMonitor.UI
 
                 if (fresh)
                 {
-                    HardwareHistoryLogger.RecordSnapshot(_cfg, key => _mon.Get(key));
+                    HardwareHistoryLogger.RecordSnapshot(_cfg, key => _mon.Get(key), _mon.IsReadInBackground);
                     CheckTemperatureAlert();
                     _sensorReading = true;
                     Task.Run(() =>

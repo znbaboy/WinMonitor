@@ -11,6 +11,7 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using WinMonitor.Core;
+using WinMonitor.Services;
 using Windows.Foundation;
 using Color = Windows.UI.Color;
 
@@ -43,6 +44,7 @@ namespace WinMonitor.UI
 
         private readonly Settings _cfg;
         private int _category, _range;
+        private bool _showRange; // min–max band, off by default
         private List<Series> _series = new();
         private readonly Canvas _chart = new();
         private readonly StackPanel _table = new() { Spacing = 2 };
@@ -74,6 +76,10 @@ namespace WinMonitor.UI
                 toolbar.Children.Add(b);
             }
             toolbar.Children.Add(new AppBarSeparator());
+            var rangeBand = new ToggleButton { Content = "Min–max", IsChecked = false };
+            ToolTipService.SetToolTip(rangeBand, "Shade the lowest-to-highest reading of each time slice");
+            rangeBand.Click += (_, _) => { _showRange = rangeBand.IsChecked == true; Draw(); };
+            toolbar.Children.Add(rangeBand);
             toolbar.Children.Add(Ui.Button("Export CSV", ExportCsv));
 
             var chartHost = new Grid { Margin = new Thickness(16, 0, 16, 8) };
@@ -157,9 +163,12 @@ namespace WinMonitor.UI
                     .OrderBy(p => p.Time).ToList(),
             }).Where(s => s.Points.Count > 0).ToList();
 
-            bool enabled = _cfg.MonitorItems.Any(i => Categories[_category].Keys.Contains(i.Key) && _cfg.IsShown(i));
+            // hidden items are recorded too when their hardware is already polled for another visible item
+            var mon = HardwareMonitor.Instance;
+            bool enabled = Categories[_category].Keys.Any(k =>
+                _cfg.MonitorItems.Any(i => i.Key == k && _cfg.IsShown(i)) || (mon?.IsReadInBackground(k) ?? false));
             _empty.Text = _series.Count > 0 ? "" : enabled ? "No history yet: values are recorded every 10 seconds while WinMonitor runs."
-                                                           : "Switch on a matching monitor item to record its history.";
+                                                           : "Nothing here is being read. Show an item from this category to record its history.";
             Draw();
             FillTable();
         }
@@ -174,8 +183,8 @@ namespace WinMonitor.UI
             const double left = 56, right = 16, top = 16, bottom = 28;
             double pw = w - left - right, ph = h - top - bottom;
 
-            float max = _series.Count == 0 ? 100 : _series.SelectMany(s => s.Points).Max(p => p.Max);
-            float min = _series.Count == 0 ? 0 : Math.Min(0, _series.SelectMany(s => s.Points).Min(p => p.Min));
+            float max = _series.Count == 0 ? 100 : _series.SelectMany(s => s.Points).Max(p => _showRange ? p.Max : p.Avg);
+            float min = _series.Count == 0 ? 0 : Math.Min(0, _series.SelectMany(s => s.Points).Min(p => _showRange ? p.Min : p.Avg));
             double niceMax = NiceCeiling(Math.Max(1, max * 1.1));
             var grid = new SolidColorBrush(Color.FromArgb(40, 128, 128, 128));
             var axisText = Ui.Res("TextFillColorSecondaryBrush");
@@ -214,7 +223,7 @@ namespace WinMonitor.UI
                     lower.Insert(0, new Windows.Foundation.Point(x, Y(p.Min)));
                 }
                 foreach (var p in lower) band.Points.Add(p);
-                _chart.Children.Add(band);
+                if (_showRange) _chart.Children.Add(band);
                 _chart.Children.Add(line);
             }
         }

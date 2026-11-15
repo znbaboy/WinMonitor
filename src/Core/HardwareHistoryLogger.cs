@@ -75,7 +75,7 @@ namespace WinMonitor.Core
             }
         }
 
-        public static void RecordSnapshot(Settings cfg, Func<string, float?> readValue)
+        public static void RecordSnapshot(Settings cfg, Func<string, float?> readValue, Func<string, bool>? backgroundRead = null)
         {
             if (cfg?.MonitorItems == null || readValue == null) return;
 
@@ -84,7 +84,7 @@ namespace WinMonitor.Core
             _lastSampleTime = now;
 
             DateTime minute = FloorMinute(now);
-            var enabledKeys = GetEnabledSupportedKeys(cfg).ToList();
+            var enabledKeys = GetEnabledSupportedKeys(cfg, backgroundRead).ToList();
             if (enabledKeys.Count == 0) return;
 
             lock (_dataLock)
@@ -185,7 +185,9 @@ namespace WinMonitor.Core
             }
         }
 
-        private static IEnumerable<string> GetEnabledSupportedKeys(Settings cfg)
+        // Records every supported key that is visible, or that is read in the background
+        // anyway (its hardware is already polled). Never triggers extra sensor reads.
+        private static IEnumerable<string> GetEnabledSupportedKeys(Settings cfg, Func<string, bool>? backgroundRead)
         {
             foreach (string key in _supportedKeys)
             {
@@ -193,7 +195,7 @@ namespace WinMonitor.Core
                     item.Key.Equals(key, StringComparison.OrdinalIgnoreCase) &&
                     cfg.IsShown(item));
 
-                if (enabled) yield return key;
+                if (enabled || (backgroundRead?.Invoke(key) ?? false)) yield return key;
             }
         }
 

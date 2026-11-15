@@ -415,6 +415,28 @@ namespace WinMonitor.Services
             return timeDelta;
         }
 
+        /// <summary>
+        /// True when the sensor behind <paramref name="key"/> is refreshed on every tick anyway
+        /// (its hardware is polled for another visible item), so recording it costs nothing extra.
+        /// Mirrors <see cref="CheckUpdateRequirements"/>; hidden hardware is never woken up for history.
+        /// </summary>
+        public bool IsReadInBackground(string key)
+        {
+            var r = CheckUpdateRequirements();
+            string group = key.Split('.')[0].ToUpperInvariant();
+            return group switch
+            {
+                "CPU" => r.NeedCpu,
+                "GPU" => r.NeedGpu,
+                // counters or LHM both only run while a memory item is visible
+                "MEM" => _cfg.IsAnyEnabled("MEM"),
+                "DISK" => r.NeedDisk,
+                "MOBO" => r.NeedMobo,
+                "BAT" => r.NeedBat,
+                _ => false
+            };
+        }
+
         private (bool ForceAll, bool NeedCpu, bool NeedGpu, bool NeedMem, bool NeedNet, bool NeedDisk, bool NeedBat, bool NeedMobo, double TimeDelta) CheckUpdateRequirements()
         {
             // === What needs updating ===

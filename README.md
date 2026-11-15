@@ -14,6 +14,14 @@ Free and open source (MIT). Portable: unzip and run.
 - 7-day history with CSV export
 - Click-through, always on top, keep on screen
 
+## Screenshots
+
+<p>
+<img src="docs/screenshots/settings.png" width="32%" alt="Settings">
+<img src="docs/screenshots/monitor-items.png" width="32%" alt="Monitor Items">
+<img src="docs/screenshots/theme-editor.png" width="32%" alt="Theme editor">
+</p>
+
 ## Install
 
 1. Download `WinMonitor-portable-x64.zip` from [Releases](https://github.com/znbaboy/WinMonitor/releases).

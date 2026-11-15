@@ -22,6 +22,21 @@ namespace WinMonitor
         public App()
         {
             UnhandledException += (_, e) => { Program.Log(e.Exception); e.Handled = true; };
+
+            // WinMonitor.exe is a single file that unpacks to a temporary folder; Windows looks for the
+            // resource index (control styles, settings cards) next to the exe, so point it at the unpacked copy
+            ResourceManagerRequested += (_, e) =>
+            {
+                foreach (var name in new[] { "resources.pri", "WinMonitor.pri" })
+                {
+                    string pri = System.IO.Path.Combine(AppContext.BaseDirectory, name);
+                    if (System.IO.File.Exists(pri))
+                    {
+                        e.CustomResourceManager = new Microsoft.Windows.ApplicationModel.Resources.ResourceManager(pri);
+                        return;
+                    }
+                }
+            };
         }
 
         protected override void OnLaunched(LaunchActivatedEventArgs args)

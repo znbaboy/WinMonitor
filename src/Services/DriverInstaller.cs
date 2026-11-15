@@ -58,6 +58,8 @@ namespace WinMonitor.Services
         // =====================================================================
         public async Task SmartCheckDriver()
         {
+            // its questions block while waiting for an answer, so never run on the UI thread
+            if (Dialogs.UI?.HasThreadAccess == true) { await Task.Run(SmartCheckDriver); return; }
             await Lock.WaitAsync().ConfigureAwait(false);
             try
             {
@@ -88,8 +90,8 @@ namespace WinMonitor.Services
             string what = info.Installed
                 ? $"Your PawnIO driver ({info.VersionText ?? "unknown version"}) is out of date. Version {RequiredPawnIOVersion.ToString(3)} is needed."
                 : "WinMonitor needs the PawnIO driver to read CPU temperature, clock and power.";
-            if (!Dialogs.YesNo(what + "\n\nDownload and install it now from github.com/namazso/PawnIO.Setup (about 3 MB)?",
-                               "WinMonitor: PawnIO driver"))
+            if (!Dialogs.YesNo(what + "\n\nDownload it from github.com/namazso/PawnIO.Setup (about 3 MB) and install it now?",
+                               "Install the PawnIO driver?", "Install", "Not now"))
                 return InstallResult.Skipped;
 
             string setup = Path.Combine(Path.GetTempPath(), $"PawnIO_setup_{Guid.NewGuid():N}.exe");
@@ -99,7 +101,7 @@ namespace WinMonitor.Services
             }
             catch (Exception ex)
             {
-                Dialogs.Error("PawnIO download failed:\n" + ex.Message, "WinMonitor: PawnIO driver");
+                Dialogs.Error("PawnIO download failed:\n" + ex.Message, "PawnIO driver");
                 return InstallResult.Failed;
             }
 
@@ -115,7 +117,7 @@ namespace WinMonitor.Services
                         return RestartNeeded(startup, "The old PawnIO driver is still being removed.");
                     if (un == OpResult.Failed)
                     {
-                        Dialogs.Error("The old PawnIO driver could not be removed. Restart Windows and try again.", "WinMonitor: PawnIO driver");
+                        Dialogs.Error("The old PawnIO driver could not be removed. Restart Windows and try again.", "PawnIO driver");
                         return InstallResult.Failed;
                     }
                 }
@@ -130,7 +132,7 @@ namespace WinMonitor.Services
                 }
 
                 // silent install failed: offer the installer's own window
-                if (Dialogs.YesNo("The PawnIO driver could not be installed automatically.\n\nOpen the PawnIO installer?", "WinMonitor: PawnIO driver"))
+                if (Dialogs.YesNo("The driver could not be installed automatically. You can run its installer yourself.", "PawnIO was not installed", "Open installer", "Cancel"))
                 {
                     await RunElevated(setup, "", checkReady: true, silent: false).ConfigureAwait(false);
                     if (PawnIOReady()) return InstallResult.Done;
@@ -147,7 +149,7 @@ namespace WinMonitor.Services
         private InstallResult RestartNeeded(bool startup, string what)
         {
             _restartRequired = true;
-            Dialogs.Info(what + "\nWindows needs to restart before CPU readings work.", "WinMonitor: restart required");
+            Dialogs.Info(what + "\nWindows needs to restart before CPU readings work.", "Restart required");
             return startup ? InstallResult.ExitApp : InstallResult.Done;
         }
 

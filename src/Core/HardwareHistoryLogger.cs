@@ -34,9 +34,9 @@ namespace WinMonitor.Core
         public static readonly string[] FrequencyKeys = { "CPU.Clock", "GPU.Clock" };
         public static readonly string[] PowerKeys = { "CPU.Power", "GPU.Power", "BAT.Power" };
 
-        private static readonly string _filePath = Path.Combine(AppContext.BaseDirectory, "HardwareHistory.json");
-        private static readonly string _backupPath = Path.Combine(AppContext.BaseDirectory, "HardwareHistory.json.bak");
-        private static readonly string _tempPath = Path.Combine(AppContext.BaseDirectory, "HardwareHistory.json.tmp");
+        private static readonly string _filePath = Path.Combine(AppInfo.DataDir, "HardwareHistory.json");
+        private static readonly string _backupPath = Path.Combine(AppInfo.DataDir, "HardwareHistory.json.bak");
+        private static readonly string _tempPath = Path.Combine(AppInfo.DataDir, "HardwareHistory.json.tmp");
         private static readonly object _dataLock = new object();
         private static readonly object _ioLock = new object();
         private static readonly TimeSpan _sampleInterval = TimeSpan.FromSeconds(10);

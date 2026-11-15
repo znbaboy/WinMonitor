@@ -42,7 +42,7 @@ namespace WinMonitor.UI
             void Item(string text, Func<Task> act) { var i = new MenuFlyoutItem { Text = text }; i.Click += async (_, _) => await act(); flyout.Items.Add(i); }
             Item("New…", () => NameDialog("New theme", "", n => { ThemeFileService.CreateTheme(n); return n; }));
             Item("Duplicate…", () => NameDialog("Duplicate theme", _name + " copy", n => { var copy = ThemeManager.Clone(_theme); copy.Name = n; ThemeFileService.SaveTheme(n, copy); return n; }));
-            Item("Rename…", () => IsDefault ? Task.Run(() => Dialogs.Info("Built-in themes cannot be renamed. Use Duplicate to make your own.")) : NameDialog("Rename theme", _name, n => { ThemeFileService.RenameTheme(_name, n); if (_app.Cfg.Skin == _name) { _app.Cfg.Skin = n; _app.Cfg.Save(); } return n; }));
+            Item("Rename…", () => IsDefault ? Note("Built-in themes cannot be renamed. Use Duplicate to make your own.") : NameDialog("Rename theme", _name, n => { ThemeFileService.RenameTheme(_name, n); if (_app.Cfg.Skin == _name) { _app.Cfg.Skin = n; _app.Cfg.Save(); } return n; }));
             Item("Delete", DeleteTheme);
             more.Flyout = flyout;
             bar.Children.Add(more);
@@ -79,7 +79,7 @@ namespace WinMonitor.UI
         private void Load(string name)
         {
             try { _theme = ThemeManager.IsBuiltIn(name) ? ThemeManager.BuiltIn(name) : ThemeFileService.LoadTheme(name); }
-            catch (Exception ex) { Dialogs.Error(ex.Message); return; }
+            catch (Exception ex) { Dialogs.Error(ex.Message, root: _root); return; }
             _name = name;
             _dirty = false;
             _fields.Content = BuildFields();
@@ -216,7 +216,7 @@ namespace WinMonitor.UI
                 if (ThemeManager.Resolve(_app.Cfg.Skin).Equals(_name, StringComparison.OrdinalIgnoreCase)) _app.ApplyThemeAndLayout(retainData: true);
                 _app.Notify("WinMonitor", $"Theme saved: {_name}", false);
             }
-            catch (Exception ex) { Dialogs.Error("Could not save the theme:\n" + ex.Message); }
+            catch (Exception ex) { Dialogs.Error("Could not save the theme:\n" + ex.Message, root: _root); }
         }
 
         private void UseTheme()
@@ -229,7 +229,7 @@ namespace WinMonitor.UI
 
         private async Task DeleteTheme()
         {
-            if (IsDefault) { Dialogs.Info("Built-in themes cannot be deleted."); return; }
+            if (IsDefault) { Dialogs.Info("Built-in themes cannot be deleted.", root: _root); return; }
             if (!await Confirm($"Delete the theme {_name}? This cannot be undone.")) return;
             ThemeFileService.DeleteTheme(_name);
             if (_app.Cfg.Skin.Equals(_name, StringComparison.OrdinalIgnoreCase))
@@ -242,12 +242,17 @@ namespace WinMonitor.UI
             FillList(ThemeManager.Resolve(_app.Cfg.Skin));
         }
 
+        private XamlRoot? _root => Content?.XamlRoot;
+
+        private Task Note(string text) { Dialogs.Info(text, root: _root); return Task.CompletedTask; }
+
         private async Task<bool> Confirm(string text)
         {
             var d = new ContentDialog
             {
-                Title = "WinMonitor",
-                Content = text,
+                Style = (Style)Application.Current.Resources["DefaultContentDialogStyle"],
+                RequestedTheme = ((FrameworkElement)Content).ActualTheme,
+                Title = text,
                 PrimaryButtonText = "Yes",
                 CloseButtonText = "No",
                 DefaultButton = ContentDialogButton.Close,
@@ -261,6 +266,8 @@ namespace WinMonitor.UI
             var box = new TextBox { Text = initial, PlaceholderText = "Theme name" };
             var d = new ContentDialog
             {
+                Style = (Style)Application.Current.Resources["DefaultContentDialogStyle"],
+                RequestedTheme = ((FrameworkElement)Content).ActualTheme,
                 Title = title,
                 Content = box,
                 PrimaryButtonText = "OK",
@@ -272,12 +279,12 @@ namespace WinMonitor.UI
             string name = box.Text.Trim();
             if (ThemeManager.IsBuiltIn(name) || name.Equals(ThemeManager.SystemMode, StringComparison.OrdinalIgnoreCase))
             {
-                Dialogs.Warn($"\"{name}\" is reserved. Please pick another name.");
+                Dialogs.Warn($"\"{name}\" is reserved. Please pick another name.", root: _root);
                 return;
             }
             if (name.Length == 0 || name.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) >= 0)
             {
-                Dialogs.Warn("Please use a name that is also a valid file name.");
+                Dialogs.Warn("Please use a name that is also a valid file name.", root: _root);
                 return;
             }
             try
@@ -286,7 +293,7 @@ namespace WinMonitor.UI
                 _dirty = false;
                 FillList(selected);
             }
-            catch (Exception ex) { Dialogs.Error(ex.Message); }
+            catch (Exception ex) { Dialogs.Error(ex.Message, root: _root); }
         }
     }
 }

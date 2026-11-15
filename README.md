@@ -24,7 +24,7 @@ Free and open source (MIT). Portable: unzip and run.
 ## Install
 
 1. Download `WinMonitor-portable-x64.zip` from [Releases](https://github.com/znbaboy/WinMonitor/releases).
-2. Unzip anywhere and run `WinMonitor.exe` (needs administrator rights for sensors).
+2. Unzip anywhere and run `WinMonitor.exe` (needs administrator rights for sensors). Settings and history are kept in the `settings` folder next to it.
 
 Optional: the [PawnIO](https://github.com/namazso/PawnIO.Setup) driver for CPU temperature, clock and power. WinMonitor offers to install it.
 

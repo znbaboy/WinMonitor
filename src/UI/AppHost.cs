@@ -33,7 +33,6 @@ namespace WinMonitor.UI
             HardwareHistoryLogger.Load();
 
             Panel = new PanelWindow(cfg);
-            Dialogs.Owner = Panel.Hwnd;
             Controller = new PanelController(cfg, Panel);
             Controller.Notify += (title, text) => Notify(title, text, true);
 
@@ -338,8 +337,13 @@ namespace WinMonitor.UI
             if (!calibrated || Cfg.MaxLimitTipShown) return;
             Cfg.MaxLimitTipShown = true;
             Cfg.Save();
-            if (Dialogs.YesNo($"First use of {name}.\n\nSet the real maximum value so the bar is accurate?\n\n" +
-                              "Choose No to skip: WinMonitor then learns the maximum under high load (e.g. gaming).", "WinMonitor"))
+            _ = AskCalibration(name);
+        }
+
+        private async System.Threading.Tasks.Task AskCalibration(string name)
+        {
+            if (await Dialogs.AskAsync("Set its real maximum so the bar is accurate, or skip and WinMonitor learns it under high load (for example while gaming).",
+                                       $"First use of {name}", null, "Set maximum", "Skip"))
                 OpenSettings("Hardware");
         }
 

@@ -279,7 +279,7 @@ namespace WinMonitor.UI
         private static void Trace(string m)
         {
             if (!Tracing) return;
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(AppContext.BaseDirectory, "WinMonitor_Trace.log"), $"{DateTime.Now:HH:mm:ss.fff} {m}\r\n"); } catch { }
+            try { System.IO.File.AppendAllText(System.IO.Path.Combine(AppInfo.DataDir, "WinMonitor_Trace.log"), $"{DateTime.Now:HH:mm:ss.fff} {m}\r\n"); } catch { }
         }
 
         public void Add(UIElement row) => Children.Add(row);

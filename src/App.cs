@@ -28,7 +28,22 @@ namespace WinMonitor
         {
             // The control styles (about 10 MB) load only when a normal window first opens: the panel does not need them.
             DispatcherShutdownMode = DispatcherShutdownMode.OnExplicitShutdown;   // the panel can be hidden; the app keeps running
-            _host = new AppHost(Settings.Load());
+            Services.Dialogs.UI = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+            _ = StartAsync(Program.StartupSettings ?? Settings.Load());
+        }
+
+        private async System.Threading.Tasks.Task StartAsync(Settings cfg)
+        {
+            // PawnIO must be in place before the sensors start; its questions show as Windows 11 dialogs
+            bool go = await System.Threading.Tasks.Task.Run(() => Services.DriverInstaller.CheckPawnIOBeforeHardware(cfg));
+            if (!go) { Exit(); return; }   // Windows must restart first
+            _host = new AppHost(cfg);
+            if (Environment.GetEnvironmentVariable("WINMONITOR_DIALOG_DEMO") == "1")   // automated screenshot of a stand-alone dialog
+            {
+                Services.Dialogs.Silent = false;
+                _ = Services.Dialogs.AskAsync("Download it from github.com/namazso/PawnIO.Setup (about 3 MB) and install it now?",
+                                              "Install the PawnIO driver?", null, "Install", "Not now");
+            }
         }
 
         private static bool _controls;

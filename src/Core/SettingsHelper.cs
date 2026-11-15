@@ -10,9 +10,9 @@ namespace WinMonitor
     public static class SettingsHelper
     {
         // Cache path
-        private static readonly string _cachedPath = Path.Combine(AppContext.BaseDirectory, "settings.json");
-        private static readonly string _backupPath = Path.Combine(AppContext.BaseDirectory, "settings.json.bak");
-        private static readonly string _tempPath = Path.Combine(AppContext.BaseDirectory, "settings.json.tmp");
+        private static readonly string _cachedPath = Path.Combine(AppInfo.DataDir, "settings.json");
+        private static readonly string _backupPath = Path.Combine(AppInfo.DataDir, "settings.json.bak");
+        private static readonly string _tempPath = Path.Combine(AppInfo.DataDir, "settings.json.tmp");
         private static readonly object _ioLock = new object();
         public static string FilePath => _cachedPath;
 

@@ -41,10 +41,10 @@ jobs:
         shell: pwsh
         run: |
           $d = 'publish/WinMonitor'
-          foreach ($f in 'WinMonitor.exe', 'WinMonitor.pri', 'Microsoft.WindowsAppRuntime.dll', 'LibreHardwareMonitorLib.dll',
-                         'resources/lang/en.json', 'Assets/app.ico', 'LICENSE', 'THIRD-PARTY-NOTICES.txt') {
-            if (-not (Test-Path "$d/$f")) { throw "$f missing from the publish output" }
-          }
+          $files = Get-ChildItem $d -File | ForEach-Object Name
+          "Publish output: $($files -join ', ')"
+          if (-not (Test-Path "$d/WinMonitor.exe")) { throw 'WinMonitor.exe missing from the publish output' }
+          if ($files.Count -ne 1) { throw "expected only WinMonitor.exe, found: $($files -join ', ')" }
           "{0:N1} MB" -f ((Get-ChildItem $d -Recurse | Measure-Object Length -Sum).Sum / 1MB)
 
       - name: Launch tests and screenshots
@@ -59,7 +59,13 @@ jobs:
 
       - name: Zip
         shell: pwsh
-        run: Compress-Archive -Path publish/WinMonitor/* -DestinationPath WinMonitor-portable-x64.zip
+        # WinMonitor.exe plus an empty settings folder (filled on first start)
+        run: |
+          Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::Open("$PWD/WinMonitor-portable-x64.zip", 'Create')
+          [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, "$PWD/publish/WinMonitor/WinMonitor.exe", 'WinMonitor.exe', 'Optimal') | Out-Null
+          $zip.CreateEntry('settings/') | Out-Null
+          $zip.Dispose()
 
       - uses: actions/upload-artifact@v4
         with:

@@ -127,7 +127,7 @@ namespace WinMonitor.UI
                 Clipboard.Flush();
                 _app.Notify("WinMonitor", T("Menu.DevicesReportCopied"), false);
             }
-            catch (Exception ex) { Dialogs.Error(ex.Message); }
+            catch (Exception ex) { Dialogs.Error(ex.Message, root: Content.XamlRoot); }
         }
 
         // ================================================================== Monitor items
@@ -325,7 +325,7 @@ namespace WinMonitor.UI
                 Ui.PageTitle(T("Menu.About")),
                 app,
                 Ui.Section("Credits"),
-                Ui.Group("Open-source components", null, "Full licence texts are in THIRD-PARTY-NOTICES.txt next to WinMonitor.exe", "\uE8F1",
+                Ui.Group("Open-source components", null, "The projects WinMonitor is built on", "\uE8F1",
                     Credit("LiteMonitor", "The monitor this app is based on (Diorser)", "MIT"),
                     Credit("Halo Battery", "Wireless device battery readers", "MIT"),
                     Credit("LibreHardwareMonitor", "Sensor readings", "MPL-2.0"),
@@ -333,21 +333,24 @@ namespace WinMonitor.UI
                     Credit("Windows Community Toolkit", "Settings cards", "MIT"),
                     Credit("WinUIEx", "See-through window technique (Morten Nielsen)", "MIT"),
                     Credit("PawnIO", "Optional driver for CPU temperature, clock and power (namazso)", "Official release")),
+                Ui.LinkRow("Licences", () => SystemActions.OpenUrl(System.IO.Path.Combine(AppContext.BaseDirectory, "THIRD-PARTY-NOTICES.txt")),
+                    "Full licence texts of the components", "\uE8A5"),
                 Ui.Section(T("Menu.Reset")),
                 Ui.Row(T("Menu.Reset"), Ui.Button(T("Menu.Reset") + "…", ResetSettings), "Deletes settings.json and restarts WinMonitor with the defaults.", "\uE777")
             );
         }
 
-        private void ResetSettings()
+        private async void ResetSettings()
         {
-            if (!Dialogs.YesNo(T("Menu.ResetConfirm"), T("Menu.Reset"))) return;
+            if (!await Dialogs.AskAsync("WinMonitor restarts with the default settings. History and your own themes are kept.",
+                                        "Reset all settings?", Content.XamlRoot, "Reset", "Cancel")) return;
             try
             {
                 Settings.GlobalBlockSave = true;
                 SettingsHelper.DeleteStoredSettings();
                 _app.Restart();
             }
-            catch (Exception ex) { Settings.GlobalBlockSave = false; Dialogs.Error(ex.Message); }
+            catch (Exception ex) { Settings.GlobalBlockSave = false; Dialogs.Error(ex.Message, root: Content.XamlRoot); }
         }
     }
 }

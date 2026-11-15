@@ -3,6 +3,7 @@ param([Parameter(Mandatory)] [string]$Dir, [string]$Shots = "screenshots")
 $ErrorActionPreference = 'Stop'
 $Dir = (Resolve-Path $Dir).Path
 $exe = Join-Path $Dir 'WinMonitor.exe'
+$Data = Join-Path $Dir 'settings'   # settings, history and logs live here
 New-Item -ItemType Directory -Force $Shots | Out-Null
 $Shots = (Resolve-Path $Shots).Path
 $env:WINMONITOR_NO_DIALOG = '1'   # no message boxes (driver / download prompts answer No)
@@ -80,8 +81,9 @@ function Stop-App {
 
 function Start-App([string]$settingsJson = $null, [string[]]$appArgs = @()) {
   Stop-App
-  Remove-Item "$Dir\settings.json*" -ErrorAction SilentlyContinue
-  if ($settingsJson) { Set-Content "$Dir\settings.json" $settingsJson -Encoding UTF8 }
+  New-Item -ItemType Directory -Force $Data | Out-Null
+  Remove-Item "$Data\settings.json*" -ErrorAction SilentlyContinue
+  if ($settingsJson) { Set-Content "$Data\settings.json" $settingsJson -Encoding UTF8 }
   if ($appArgs.Count -gt 0) { $p = Start-Process $exe -ArgumentList $appArgs -PassThru } else { $p = Start-Process $exe -PassThru }
   Start-Sleep 20
   if ($p.HasExited) { Fail "app exited early (code $($p.ExitCode))"; return $null }
@@ -192,11 +194,11 @@ if ($p) {
     else {
       $ra = $a.Current.BoundingRectangle; $rb = $b.Current.BoundingRectangle
       Drag-Mouse ([int]($ra.X + $ra.Width / 2)) ([int]($ra.Y + $ra.Height / 2)) ([int]($rb.Y + $rb.Height + 8))
-      $json = Get-Content "$Dir\settings.json" -Raw | ConvertFrom-Json
+      $json = Get-Content "$Data\settings.json" -Raw | ConvertFrom-Json
       $host1 = ($json.MonitorItems | Where-Object Key -eq 'DASH.HOST').SortIndex
       $time1 = ($json.MonitorItems | Where-Object Key -eq 'DASH.Time').SortIndex
       Write-Host "DRAG: DASH.HOST=$host1 DASH.Time=$time1"
-      if (Test-Path "$Dir\WinMonitor_Trace.log") { Get-Content "$Dir\WinMonitor_Trace.log" | Select-Object -First 15 | ForEach-Object { Write-Host "TRACE $_" } } else { Write-Host 'TRACE: no trace written (press never reached the handle)' }
+      if (Test-Path "$Data\WinMonitor_Trace.log") { Get-Content "$Data\WinMonitor_Trace.log" | Select-Object -First 15 | ForEach-Object { Write-Host "TRACE $_" } } else { Write-Host 'TRACE: no trace written (press never reached the handle)' }
       if ($host1 -gt $time1) { Ok 'drag to reorder rows' } else { Fail 'drag to reorder rows did not change the order' }
       Shot $win 'settings-items-dragged' 0 $true
       # drag the expanded Devices category up above Dashboard
@@ -204,7 +206,7 @@ if ($p) {
       if ($ua -and $ub) {
         $r1 = $ua.Current.BoundingRectangle; $r2 = $ub.Current.BoundingRectangle
         Drag-MouseY ([int]($r1.X + $r1.Width / 2)) ([int]($r1.Y + $r1.Height / 2)) ([int]($r2.Y - 4))
-        $json = Get-Content "$Dir\settings.json" -Raw | ConvertFrom-Json
+        $json = Get-Content "$Data\settings.json" -Raw | ConvertFrom-Json
         $d = ($json.MonitorItems | Where-Object Key -eq 'DASH.Uptime').SortIndex; $h = ($json.MonitorItems | Where-Object Key -eq 'HALO.Mouse').SortIndex
         Write-Host "DRAG CATEGORY UP: DASH.Uptime=$d HALO.Mouse=$h"
         Shot $win 'settings-items-category-up' 0 $true
@@ -219,7 +221,7 @@ if ($p) {
       if ($ca -and $cb) {
         $r1 = $ca.Current.BoundingRectangle; $r2 = $cb.Current.BoundingRectangle
         Drag-Mouse ([int]($r1.X + $r1.Width / 2)) ([int]($r1.Y + $r1.Height / 2)) ([int]($r2.Y + $r2.Height + 12))
-        $json = Get-Content "$Dir\settings.json" -Raw | ConvertFrom-Json
+        $json = Get-Content "$Data\settings.json" -Raw | ConvertFrom-Json
         $d = ($json.MonitorItems | Where-Object Key -eq 'DASH.Uptime').SortIndex; $h = ($json.MonitorItems | Where-Object Key -eq 'HALO.Mouse').SortIndex
         Write-Host "DRAG CATEGORY DOWN: DASH.Uptime=$d HALO.Mouse=$h"
         Shot $win 'settings-items-category-dragged' 0 $true
@@ -228,7 +230,7 @@ if ($p) {
     }
   } catch { Fail "drag test: $_" }
 }
-$env:WINMONITOR_EXPAND_ALL = $null; $env:WINMONITOR_TRACE = $null; Remove-Item "$Dir\WinMonitor_Trace.log" -ErrorAction SilentlyContinue
+$env:WINMONITOR_EXPAND_ALL = $null; $env:WINMONITOR_TRACE = $null; Remove-Item "$Data\WinMonitor_Trace.log" -ErrorAction SilentlyContinue
 $p = Start-App $null @('--open', 'settings:Hardware')
 if ($p) { Start-Sleep 5; Window $p 'Settings - WinMonitor' 'settings-hardware' }
 $p = Start-App $null @('--open', 'settings:Alerts')
@@ -241,12 +243,42 @@ $p = Start-App $null @('--open', 'hardware')
 if ($p) { Window $p 'Hardware Info' 'hardware-info' }
 $p = Start-App $null @('--open', 'themes')
 if ($p) { Window $p 'Theme editor' 'theme-editor' }
+
+# Windows 11 dialogs: the reset question over Settings (ContentDialog), and a stand-alone dialog window
+$env:WINMONITOR_NO_DIALOG = $null
+$p = Start-App $null @('--open', 'settings:About')
+if ($p) {
+  try {
+    $win = [W]::Find([uint32]$p.Id, 'Settings - WinMonitor', $false) | Select-Object -First 1
+    [W]::SetWindowPos($win, [IntPtr]::Zero, 60, 30, 900, 700, 0x40) | Out-Null
+    Start-Sleep 2
+    $root = [System.Windows.Automation.AutomationElement]::FromHandle($win)
+    $c = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, 'Reset…')
+    $btn = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $c)
+    if (-not $btn) { Fail 'reset button not found' }
+    else {
+      $btn.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+      Start-Sleep 3
+      Shot $win 'dialog-reset' 0 $true
+      $cc = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, 'Cancel')
+      $cancel = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cc)
+      if ($cancel) { $cancel.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke(); Ok 'reset dialog' } else { Fail 'reset dialog: no Cancel button' }
+    }
+  } catch { Fail "reset dialog: $_" }
+}
+$env:WINMONITOR_DIALOG_DEMO = '1'
+$p = Start-App
+if ($p) {
+  $win = [W]::Find([uint32]$p.Id, 'Install the PawnIO driver?', $false) | Select-Object -First 1
+  if ($win) { [W]::SetForegroundWindow($win) | Out-Null; Start-Sleep 2; Shot $win 'dialog-window' 0 $true; Ok 'dialog window' } else { Fail 'dialog window not found' }
+}
+$env:WINMONITOR_DIALOG_DEMO = $null; $env:WINMONITOR_NO_DIALOG = '1'
 Stop-App
 
 # ---------------------------------------------------------------- 6. errors
-$log = Join-Path $Dir 'WinMonitor_Error.log'
+$log = Join-Path $Data 'WinMonitor_Error.log'
 if (Test-Path $log) { Get-Content $log | Select-Object -First 80; Fail 'WinMonitor_Error.log was written' } else { Ok 'no error log' }
-Remove-Item "$Dir\settings.json*", "$Dir\*.json.bak", "$Dir\TrafficHistory.json", "$Dir\HardwareHistory.json", $log -ErrorAction SilentlyContinue
+Remove-Item $Data -Recurse -ErrorAction SilentlyContinue
 
 if ($script:failed.Count -gt 0) { Write-Host "`n$($script:failed.Count) check(s) failed:"; $script:failed | ForEach-Object { Write-Host " - $_" }; exit 1 }
 Write-Host "`nAll checks passed."

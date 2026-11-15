@@ -23,9 +23,9 @@ namespace WinMonitor.Core
     // === Store (static) ===
     public static class TrafficLogger
     {
-        private static readonly string _filePath = Path.Combine(AppContext.BaseDirectory, "TrafficHistory.json");
-        private static readonly string _backupPath = Path.Combine(AppContext.BaseDirectory, "TrafficHistory.json.bak");
-        private static readonly string _tempPath = Path.Combine(AppContext.BaseDirectory, "TrafficHistory.json.tmp");
+        private static readonly string _filePath = Path.Combine(AppInfo.DataDir, "TrafficHistory.json");
+        private static readonly string _backupPath = Path.Combine(AppInfo.DataDir, "TrafficHistory.json.bak");
+        private static readonly string _tempPath = Path.Combine(AppInfo.DataDir, "TrafficHistory.json.tmp");
         private static readonly object _ioLock = new object(); // file lock
         private static readonly object _dataLock = new object(); // data lock
         // Cached values

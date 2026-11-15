@@ -18,7 +18,7 @@ namespace WinMonitor
             AppDomain.CurrentDomain.UnhandledException += (_, e) => Report(e.ExceptionObject as Exception);
 
             // one instance per folder (two portable copies in different folders may run side by side)
-            string folder = AppContext.BaseDirectory.TrimEnd('\\', '/').ToLowerInvariant();
+            string folder = AppInfo.ExeDir.TrimEnd('\\', '/').ToLowerInvariant();
             string name = "Global\\WinMonitor_" + Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(System.Text.Encoding.UTF8.GetBytes(folder)))[..16];
             _mutex = new Mutex(true, name, out bool first);
             if (!first && Array.IndexOf(args, "--restart") >= 0)
@@ -37,7 +37,7 @@ namespace WinMonitor
                 LanguageManager.Load("en");
                 var cfg = Settings.Load();
                 cfg.SyncToLanguage();
-                if (!DriverInstaller.CheckPawnIOBeforeHardware(cfg)) return 0;   // Windows must restart first
+                StartupSettings = cfg;
 
                 WinRT.ComWrappersSupport.InitializeComWrappers();
                 Application.Start(p =>
@@ -55,7 +55,10 @@ namespace WinMonitor
             }
         }
 
-        private static readonly string LogPath = Path.Combine(AppContext.BaseDirectory, "WinMonitor_Error.log");
+        /// <summary>Settings loaded before the UI starts (handed to the app).</summary>
+        internal static Settings? StartupSettings;
+
+        private static readonly string LogPath = Path.Combine(AppInfo.DataDir, "WinMonitor_Error.log");
 
         /// <summary>Logs a non-fatal error next to the app.</summary>
         public static void Log(Exception? ex)
@@ -67,7 +70,7 @@ namespace WinMonitor
         private static void Report(Exception? ex)
         {
             Log(ex);
-            Dialogs.Error($"WinMonitor hit an error and has to close.\n\n{ex?.Message}\n\nDetails: {LogPath}", "WinMonitor crashed");
+            Dialogs.NativeError($"WinMonitor hit an error and has to close.\n\n{ex?.Message}\n\nDetails: {LogPath}", "WinMonitor crashed");
         }
     }
 }

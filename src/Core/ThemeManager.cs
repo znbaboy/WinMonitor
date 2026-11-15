@@ -178,7 +178,7 @@ namespace WinMonitor.Core
         {
             get
             {
-                var dir = Path.Combine(AppContext.BaseDirectory, "resources", "themes");
+                var dir = Path.Combine(AppInfo.DataDir, "themes");
                 if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
                 return dir;
             }

@@ -284,7 +284,7 @@ namespace WinMonitor.UI
                           .Append(s.Unit).Append(',').Append(p.Count).Append("\r\n");
                 await File.WriteAllTextAsync(file.Path, sb.ToString(), new UTF8Encoding(true));
             }
-            catch (Exception ex) { Services.Dialogs.Error("Export failed: " + ex.Message); }
+            catch (Exception ex) { Services.Dialogs.Error("Export failed: " + ex.Message, root: Content.XamlRoot); }
         }
     }
 }

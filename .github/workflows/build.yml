@@ -11,6 +11,10 @@ on:
         description: 'Create a GitHub release with this tag (e.g. v1.0.0). Leave empty to just build.'
         required: false
         default: ''
+      replace:
+        description: 'Delete an existing release and tag with the same name first'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -61,6 +65,17 @@ jobs:
         with:
           name: WinMonitor-portable-x64
           path: WinMonitor-portable-x64.zip
+
+      - name: Replace existing release
+        if: inputs.release != '' && inputs.replace
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete "${{ inputs.release }}" --cleanup-tag -y --repo "${{ github.repository }}"
+          if ($LASTEXITCODE -ne 0) { Write-Host "No existing release" }
+          git push origin ":refs/tags/${{ inputs.release }}" 2>$null
+          exit 0
 
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/v') || inputs.release != ''

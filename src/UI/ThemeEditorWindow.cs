@@ -22,6 +22,7 @@ namespace WinMonitor.UI
 
         private readonly AppHost _app;
         private readonly ComboBox _themes = new() { Width = 240 };
+        private readonly Button _save;
         private readonly ContentControl _fields = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch };
         private string _name = "";
         private Theme _theme = new();
@@ -33,14 +34,15 @@ namespace WinMonitor.UI
             _app = app;
             var bar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(24, 0, 24, 8) };
             bar.Children.Add(_themes);
-            bar.Children.Add(Ui.Button("Save", Save, accent: true));
+            _save = Ui.Button("Save", Save, accent: true);
+            bar.Children.Add(_save);
             bar.Children.Add(Ui.Button("Use this theme", UseTheme));
             var more = new DropDownButton { Content = "More" };
             var flyout = new MenuFlyout();
             void Item(string text, Func<Task> act) { var i = new MenuFlyoutItem { Text = text }; i.Click += async (_, _) => await act(); flyout.Items.Add(i); }
             Item("New…", () => NameDialog("New theme", "", n => { ThemeFileService.CreateTheme(n); return n; }));
-            Item("Duplicate…", () => NameDialog("Duplicate theme", _name + "_copy", n => { ThemeFileService.DuplicateTheme(_name, n); return n; }));
-            Item("Rename…", () => IsDefault ? Task.Run(() => Dialogs.Info("The Windows 11 themes cannot be renamed. Use Duplicate to make your own.")) : NameDialog("Rename theme", _name, n => { ThemeFileService.RenameTheme(_name, n); if (_app.Cfg.Skin == _name) { _app.Cfg.Skin = n; _app.Cfg.Save(); } return n; }));
+            Item("Duplicate…", () => NameDialog("Duplicate theme", _name + " copy", n => { var copy = ThemeManager.Clone(_theme); copy.Name = n; ThemeFileService.SaveTheme(n, copy); return n; }));
+            Item("Rename…", () => IsDefault ? Task.Run(() => Dialogs.Info("Built-in themes cannot be renamed. Use Duplicate to make your own.")) : NameDialog("Rename theme", _name, n => { ThemeFileService.RenameTheme(_name, n); if (_app.Cfg.Skin == _name) { _app.Cfg.Skin = n; _app.Cfg.Save(); } return n; }));
             Item("Delete", DeleteTheme);
             more.Flyout = flyout;
             bar.Children.Add(more);
@@ -67,7 +69,7 @@ namespace WinMonitor.UI
         {
             _loading = true;
             _themes.Items.Clear();
-            foreach (var n in ThemeFileService.ListThemes()) _themes.Items.Add(n);
+            foreach (var n in ThemeManager.GetAvailableThemes()) _themes.Items.Add(n);
             _loading = false;
             var pick = _themes.Items.Cast<string>().FirstOrDefault(n => n.Equals(select, StringComparison.OrdinalIgnoreCase))
                        ?? _themes.Items.Cast<string>().FirstOrDefault();
@@ -76,11 +78,12 @@ namespace WinMonitor.UI
 
         private void Load(string name)
         {
-            try { _theme = ThemeFileService.LoadTheme(name); }
+            try { _theme = ThemeManager.IsBuiltIn(name) ? ThemeManager.BuiltIn(name) : ThemeFileService.LoadTheme(name); }
             catch (Exception ex) { Dialogs.Error(ex.Message); return; }
             _name = name;
             _dirty = false;
             _fields.Content = BuildFields();
+            _save.IsEnabled = !IsDefault;
             Preview();
         }
 
@@ -102,8 +105,10 @@ namespace WinMonitor.UI
             Border Pt(string title, double value, Action<double> set) =>
                 Ui.Row(title, Ui.NumberUnit(value, 4, 72, "pt", v => { set(v); Changed(); }, 0.5));
 
-            return Ui.Page(
-                Ui.Hint("Changes show on the panel straight away. Save writes them to the theme file; closing without saving drops them."),
+            var page = Ui.Page(
+                Ui.Hint(IsDefault
+                    ? "Built-in theme: it cannot be changed. Use More \u2192 Duplicate to make your own copy, then edit that."
+                    : "Changes show on the panel straight away. Save writes them to the theme file; closing without saving drops them."),
                 Ui.Section("Layout"),
                 Num("Corner radius", L.CornerRadius, v => L.CornerRadius = v),
                 Num("Row height", L.RowHeight, v => L.RowHeight = v),
@@ -138,6 +143,20 @@ namespace WinMonitor.UI
                 ColorRow("Bar: medium", C.BarMid, v => C.BarMid = v),
                 ColorRow("Bar: high", C.BarHigh, v => C.BarHigh = v)
             );
+
+            // built-in themes: show the values, but disabled
+            if (IsDefault && page.Content is StackPanel stack && stack.Children.Count > 1)
+            {
+                var fields = new StackPanel { Spacing = 4 };
+                while (stack.Children.Count > 1)
+                {
+                    var e = stack.Children[1];
+                    stack.Children.RemoveAt(1);
+                    fields.Children.Add(e);
+                }
+                stack.Children.Add(new ContentControl { Content = fields, IsEnabled = false, IsTabStop = false, HorizontalContentAlignment = HorizontalAlignment.Stretch });
+            }
+            return page;
         }
 
         private FrameworkElement FontBox(string value, Action<string> set)
@@ -206,11 +225,11 @@ namespace WinMonitor.UI
             _app.SetTheme(_name);
         }
 
-        private bool IsDefault => _name == ThemeManager.DarkDefault || _name == ThemeManager.LightDefault;
+        private bool IsDefault => ThemeManager.IsBuiltIn(_name);
 
         private async Task DeleteTheme()
         {
-            if (IsDefault) { Dialogs.Info("The Windows 11 themes cannot be deleted (you can edit them). Use Duplicate to make your own."); return; }
+            if (IsDefault) { Dialogs.Info("Built-in themes cannot be deleted."); return; }
             if (!await Confirm($"Delete the theme {_name}? This cannot be undone.")) return;
             ThemeFileService.DeleteTheme(_name);
             if (_app.Cfg.Skin.Equals(_name, StringComparison.OrdinalIgnoreCase))
@@ -251,6 +270,11 @@ namespace WinMonitor.UI
             };
             if (await d.ShowAsync() != ContentDialogResult.Primary) return;
             string name = box.Text.Trim();
+            if (ThemeManager.IsBuiltIn(name) || name.Equals(ThemeManager.SystemMode, StringComparison.OrdinalIgnoreCase))
+            {
+                Dialogs.Warn($"\"{name}\" is reserved. Please pick another name.");
+                return;
+            }
             if (name.Length == 0 || name.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) >= 0)
             {
                 Dialogs.Warn("Please use a name that is also a valid file name.");

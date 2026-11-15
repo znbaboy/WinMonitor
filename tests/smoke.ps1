@@ -128,9 +128,9 @@ if ($p) {
 }
 
 # ---------------------------------------------------------------- 2. light and dark looks
-$p = Start-App '{ "Skin": "Windows11_Light", "UIScale": 0.85 }'
+$p = Start-App '{ "Skin": "Light", "UIScale": 0.85 }'
 if ($p) { $h = Panel $p; if ($h) { Shot $h 'panel-light' 24; Ok 'light look' } else { Fail 'light look: no panel' } }
-$p = Start-App '{ "Skin": "Windows11_Dark", "Opacity": 0.6, "PanelWidth": 300, "UIScale": 0.85 }'
+$p = Start-App '{ "Skin": "Dark", "Opacity": 0.6, "PanelWidth": 300, "UIScale": 0.85 }'
 if ($p) { $h = Panel $p; if ($h) { Shot $h 'panel-dark-60' 24; Ok 'dark look, 60% opacity' } else { Fail 'dark look: no panel' } }
 
 # ---------------------------------------------------------------- 4. click-through
@@ -152,7 +152,7 @@ $p = Start-App $null @('--open', 'settings')
 if ($p) { Window $p 'Settings - WinMonitor' 'settings-panel' }
 $p = Start-App $null @('--open', 'settings:Items')
 if ($p) { Window $p 'Settings - WinMonitor' 'settings-items' }
-$env:WINMONITOR_EXPAND_ALL = '1'
+$env:WINMONITOR_EXPAND_ALL = '1'; $env:WINMONITOR_TRACE = '1'
 $p = Start-App '{ "DisabledGroups": ["GPU"] }' @('--open', 'settings:Items')
 if ($p) { Window $p 'Settings - WinMonitor' 'settings-items-expanded' 900 1000 }
 if ($p) {
@@ -179,12 +179,13 @@ if ($p) {
       $host1 = ($json.MonitorItems | Where-Object Key -eq 'DASH.HOST').SortIndex
       $time1 = ($json.MonitorItems | Where-Object Key -eq 'DASH.Time').SortIndex
       Write-Host "DRAG: DASH.HOST=$host1 DASH.Time=$time1"
+      if (Test-Path "$Dir\WinMonitor_Trace.log") { Get-Content "$Dir\WinMonitor_Trace.log" | Select-Object -First 15 | ForEach-Object { Write-Host "TRACE $_" } } else { Write-Host 'TRACE: no trace written (press never reached the handle)' }
       if ($host1 -gt $time1) { Ok 'drag to reorder rows' } else { Fail 'drag to reorder rows did not change the order' }
       Shot $win 'settings-items-dragged' 0 $true
     }
   } catch { Fail "drag test: $_" }
 }
-$env:WINMONITOR_EXPAND_ALL = $null
+$env:WINMONITOR_EXPAND_ALL = $null; $env:WINMONITOR_TRACE = $null; Remove-Item "$Dir\WinMonitor_Trace.log" -ErrorAction SilentlyContinue
 $p = Start-App $null @('--open', 'settings:Hardware')
 if ($p) { Start-Sleep 5; Window $p 'Settings - WinMonitor' 'settings-hardware' }
 $p = Start-App $null @('--open', 'settings:About')

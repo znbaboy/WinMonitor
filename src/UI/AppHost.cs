@@ -212,7 +212,7 @@ namespace WinMonitor.UI
 
         private static string T(string key) => LanguageManager.T(key);
 
-        public const string SystemThemeLabel = "Use Windows setting (Windows 11 light / dark)";
+        public const string SystemThemeLabel = "Use system theme";
 
         public void SetTheme(string skin)
         {

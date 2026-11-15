@@ -37,7 +37,7 @@ namespace WinMonitor.UI
 
             var stack = new StackPanel { Spacing = 4, Margin = new Thickness(24, 8, 24, 24), MaxWidth = 1000 };
             stack.Children.Add(Ui.PageTitle(T("Menu.MonitorItemDisplay")));
-            stack.Children.Add(Ui.Hint("Drag ≡ to reorder categories and rows. Switch a category off to hide it from the panel; its rows keep their ticks. ✏️ renames a row or changes its unit."));
+            stack.Children.Add(Ui.Hint("Drag ≡ to reorder categories and rows. Switch a category off to hide it from the panel; its rows keep their ticks. Type over a greyed name or unit to change it; clear it to go back to automatic."));
             stack.Children.Add(tools);
             stack.Children.Add(_categories);
             Root = new ScrollViewer { Content = stack, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
@@ -267,6 +267,14 @@ namespace WinMonitor.UI
     internal sealed class ReorderPanel : StackPanel
     {
         public event Action? Reordered;
+
+        // WINMONITOR_TRACE=1 writes drag steps to WinMonitor_Trace.log (automated tests)
+        private static readonly bool Tracing = Environment.GetEnvironmentVariable("WINMONITOR_TRACE") == "1";
+        private static void Trace(string m)
+        {
+            if (!Tracing) return;
+            try { System.IO.File.AppendAllText(System.IO.Path.Combine(AppContext.BaseDirectory, "WinMonitor_Trace.log"), $"{DateTime.Now:HH:mm:ss.fff} {m}\r\n"); } catch { }
+        }
         private UIElement? _drag;
         private int _startIndex;
 
@@ -288,7 +296,8 @@ namespace WinMonitor.UI
                 _drag = row;
                 _startIndex = Children.IndexOf(row);
                 row.Opacity = 0.6;
-                CapturePointer(e.Pointer);
+                bool captured = CapturePointer(e.Pointer);
+                Trace($"press index={_startIndex} captured={captured} children={Children.Count}");
                 e.Handled = true;   // not a click on the card header
             };
         }
@@ -305,6 +314,7 @@ namespace WinMonitor.UI
                 double top = child.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, 0)).Y;
                 if (y < top + child.ActualHeight / 2) { to = i > from ? i - 1 : i; break; }
             }
+            Trace($"move y={y:0} from={from} to={to}");
             if (to != from && to >= 0) Children.Move((uint)from, (uint)to);
             e.Handled = true;
         }
@@ -315,6 +325,7 @@ namespace WinMonitor.UI
             var row = _drag;
             _drag = null;
             row.Opacity = 1;
+            Trace($"drop index={Children.IndexOf(row)} start={_startIndex}");
             ReleasePointerCaptures();
             if (Children.IndexOf(row) != _startIndex) Reordered?.Invoke();
         }

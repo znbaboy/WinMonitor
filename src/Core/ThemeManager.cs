@@ -165,7 +165,14 @@ namespace WinMonitor.Core
         private static readonly Dictionary<string, Color> _colorCache = new(32);
         private static readonly object _lock = new object(); 
 
-        public const string SystemMode = "System", DarkDefault = "Windows11_Dark", LightDefault = "Windows11_Light";
+        public const string SystemMode = "System", DarkDefault = "Dark", LightDefault = "Light";
+
+        /// <summary>The two built-in Windows 11 style themes: part of the app, not editable.</summary>
+        public static bool IsBuiltIn(string name) =>
+            name.Equals(DarkDefault, StringComparison.OrdinalIgnoreCase) || name.Equals(LightDefault, StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>A fresh copy of a built-in theme.</summary>
+        public static Theme BuiltIn(string name) => name.Equals(LightDefault, StringComparison.OrdinalIgnoreCase) ? Windows11Light() : Windows11Dark();
 
         public static string ThemeDir
         {
@@ -177,17 +184,19 @@ namespace WinMonitor.Core
             }
         }
 
-        /// <summary>Theme file names (without .json), the two Windows 11 defaults first.</summary>
+        /// <summary>Built-in Dark and Light first, then the custom theme files (without .json).</summary>
         public static IEnumerable<string> GetAvailableThemes()
         {
-            EnsureDefaults();
+            var list = new List<string> { DarkDefault, LightDefault };
             try
             {
-                var names = Directory.EnumerateFiles(ThemeDir, "*.json").Select(f => Path.GetFileNameWithoutExtension(f)!).ToList();
-                return names.Where(n => n == DarkDefault || n == LightDefault).OrderBy(n => n == LightDefault)
-                            .Concat(names.Where(n => n != DarkDefault && n != LightDefault).OrderBy(n => n)).ToArray();
+                list.AddRange(Directory.EnumerateFiles(ThemeDir, "*.json")
+                    .Select(f => Path.GetFileNameWithoutExtension(f)!)
+                    .Where(n => !IsBuiltIn(n) && n != SystemMode)
+                    .OrderBy(n => n));
             }
-            catch { return new[] { DarkDefault, LightDefault }; }
+            catch { }
+            return list;
         }
 
         /// <summary>Windows apps set to dark?</summary>
@@ -209,8 +218,8 @@ namespace WinMonitor.Core
         public static bool IsDark(string skin)
         {
             var name = Resolve(skin);
-            if (name == DarkDefault) return true;
-            if (name == LightDefault) return false;
+            if (name.Equals(DarkDefault, StringComparison.OrdinalIgnoreCase)) return true;
+            if (name.Equals(LightDefault, StringComparison.OrdinalIgnoreCase)) return false;
             var c = ParseColor((name == Current.Name ? Current : TryRead(name) ?? Current).Color.Background);
             return (0.299 * c.R + 0.587 * c.G + 0.114 * c.B) < 128;
         }
@@ -219,6 +228,7 @@ namespace WinMonitor.Core
 
         private static Theme? TryRead(string name)
         {
+            if (IsBuiltIn(name)) return BuiltIn(name);
             try
             {
                 var path = Path.Combine(ThemeDir, name + ".json");
@@ -227,31 +237,16 @@ namespace WinMonitor.Core
             catch { return null; }
         }
 
-        /// <summary>Loads a theme ("System" or a file name) and makes it current. Falls back to the Windows 11 defaults.</summary>
+        /// <summary>Loads a theme ("System", "Dark", "Light" or a custom theme's name) and makes it current.</summary>
         public static Theme Load(string skin)
         {
-            EnsureDefaults();
             string name = Resolve(skin);
-            var theme = TryRead(name) ?? (WindowsIsDark() || name == DarkDefault ? Windows11Dark() : Windows11Light());
+            var theme = TryRead(name) ?? BuiltIn(WindowsIsDark() ? DarkDefault : LightDefault);   // missing file: follow Windows
             if (string.IsNullOrEmpty(theme.Name)) theme.Name = name;
             theme.Font.Family = UIUtils.Intern(theme.Font.Family ?? "");
             theme.Font.ValueFamily = UIUtils.Intern(theme.Font.ValueFamily ?? "");
             Current = theme;
             return theme;
-        }
-
-        /// <summary>Puts the two Windows 11 theme files back if they were deleted.</summary>
-        private static void EnsureDefaults()
-        {
-            try
-            {
-                foreach (var (name, make) in new (string, Func<Theme>)[] { (DarkDefault, Windows11Dark), (LightDefault, Windows11Light) })
-                {
-                    var path = Path.Combine(ThemeDir, name + ".json");
-                    if (!File.Exists(path)) File.WriteAllText(path, JsonSerializer.Serialize(make(), new JsonSerializerOptions { WriteIndented = true }));
-                }
-            }
-            catch { }
         }
 
         /// <summary>Makes a theme object the current one (the theme editor's live preview).</summary>
@@ -261,7 +256,7 @@ namespace WinMonitor.Core
         public static Theme Clone(Theme theme) =>
             JsonSerializer.Deserialize<Theme>(JsonSerializer.Serialize(theme)) ?? new Theme();
 
-        // The defaults, also written to resources/themes when missing.
+        // The built-in themes.
         private static Theme Base() => new()
         {
             Version = 3,

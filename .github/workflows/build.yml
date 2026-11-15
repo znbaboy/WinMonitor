@@ -43,7 +43,6 @@ jobs:
           $d = 'publish/WinMonitor'
           $files = Get-ChildItem $d -File | ForEach-Object Name
           "Publish output: $($files -join ', ')"
-          Get-ChildItem bin, obj -Recurse -Filter *.pri | ForEach-Object { "PRI: $($_.FullName) $($_.Length)" }
           if (-not (Test-Path "$d/WinMonitor.exe")) { throw 'WinMonitor.exe missing from the publish output' }
           if ($files.Count -ne 1) { throw "expected only WinMonitor.exe, found: $($files -join ', ')" }
           "{0:N1} MB" -f ((Get-ChildItem $d -Recurse | Measure-Object Length -Sum).Sum / 1MB)
@@ -60,13 +59,8 @@ jobs:
 
       - name: Zip
         shell: pwsh
-        # WinMonitor.exe plus an empty settings folder (filled on first start)
-        run: |
-          Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
-          $zip = [System.IO.Compression.ZipFile]::Open("$PWD/WinMonitor-portable-x64.zip", 'Create')
-          [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, "$PWD/publish/WinMonitor/WinMonitor.exe", 'WinMonitor.exe', 'Optimal') | Out-Null
-          $zip.CreateEntry('settings/') | Out-Null
-          $zip.Dispose()
+        # just WinMonitor.exe: settings.json is created next to it on first start
+        run: Compress-Archive -Path publish/WinMonitor/WinMonitor.exe -DestinationPath WinMonitor-portable-x64.zip
 
       - uses: actions/upload-artifact@v4
         with:

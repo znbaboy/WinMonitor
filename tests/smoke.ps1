@@ -3,7 +3,7 @@ param([Parameter(Mandatory)] [string]$Dir, [string]$Shots = "screenshots")
 $ErrorActionPreference = 'Stop'
 $Dir = (Resolve-Path $Dir).Path
 $exe = Join-Path $Dir 'WinMonitor.exe'
-$Data = Join-Path $Dir 'settings'   # settings, history and logs live here
+$Data = Join-Path $Dir '.winmonitor'   # history, logs and backups live here; settings.json is next to the exe
 New-Item -ItemType Directory -Force $Shots | Out-Null
 $Shots = (Resolve-Path $Shots).Path
 $env:WINMONITOR_NO_DIALOG = '1'   # no message boxes (driver / download prompts answer No)
@@ -82,8 +82,8 @@ function Stop-App {
 function Start-App([string]$settingsJson = $null, [string[]]$appArgs = @()) {
   Stop-App
   New-Item -ItemType Directory -Force $Data | Out-Null
-  Remove-Item "$Data\settings.json*" -ErrorAction SilentlyContinue
-  if ($settingsJson) { Set-Content "$Data\settings.json" $settingsJson -Encoding UTF8 }
+  Remove-Item "$Dir\settings.json*", "$Data\settings.json*" -ErrorAction SilentlyContinue
+  if ($settingsJson) { Set-Content "$Dir\settings.json" $settingsJson -Encoding UTF8 }
   if ($appArgs.Count -gt 0) { $p = Start-Process $exe -ArgumentList $appArgs -PassThru } else { $p = Start-Process $exe -PassThru }
   Start-Sleep 20
   if ($p.HasExited) { Fail "app exited early (code $($p.ExitCode))"; return $null }
@@ -132,6 +132,7 @@ if ($p) {
     $child = [W]::FindWindowEx($h, [IntPtr]::Zero, $null, $null); $cr = New-Object W+RECT; [W]::GetWindowRect($child, [ref]$cr) | Out-Null
     Write-Host ('RECTS: window {0},{1},{2},{3}  first child {4},{5},{6},{7}' -f $r.L, $r.T, $r.R, $r.B, $cr.L, $cr.T, $cr.R, $cr.B)
     if (($r.R - $r.L) -lt 100 -or ($r.B - $r.T) -lt 100) { Fail "panel too small: $($r.R - $r.L)x$($r.B - $r.T)" } else { Ok "panel $($r.R - $r.L)x$($r.B - $r.T)" }
+    if (Test-Path "$Dir\settings.json") { Ok 'settings.json created on first start' } else { Fail 'settings.json not created on first start' }
     if (($ex -band 0x80) -eq 0) { Fail 'panel is not a tool window (would show in the taskbar)' } else { Ok 'tool window' }
     if (($ex -band 0x8) -ne 0) { Fail 'panel is always on top, but that is off by default' } else { Ok 'not on top by default' }
     Shot $h 'panel-default' 24
@@ -147,7 +148,6 @@ if ($p) {
   Start-Sleep 50
   $pws = (Get-Counter '\Process(WinMonitor)\Working Set - Private').CounterSamples[0].CookedValue / 1MB
   $proc = Get-Process WinMonitor | Select-Object -First 1
-  Get-ChildItem "$env:TEMP\.net" -Recurse -Include *.pri,*.xbf -ErrorAction SilentlyContinue | ForEach-Object { "UNPACKED: $($_.FullName) $($_.Length)" } | Write-Host
   "MEMORY: private working set {0:N1} MB, working set {1:N1} MB, private bytes {2:N1} MB" -f $pws, ($proc.WorkingSet64 / 1MB), ($proc.PrivateMemorySize64 / 1MB) | Write-Host
   if ($pws -gt 45) { Fail ("private working set {0:N1} MB is above 45 MB" -f $pws) } else { Ok ("memory {0:N1} MB" -f $pws) }
 }
@@ -195,7 +195,7 @@ if ($p) {
     else {
       $ra = $a.Current.BoundingRectangle; $rb = $b.Current.BoundingRectangle
       Drag-Mouse ([int]($ra.X + $ra.Width / 2)) ([int]($ra.Y + $ra.Height / 2)) ([int]($rb.Y + $rb.Height + 8))
-      $json = Get-Content "$Data\settings.json" -Raw | ConvertFrom-Json
+      $json = Get-Content "$Dir\settings.json" -Raw | ConvertFrom-Json
       $host1 = ($json.MonitorItems | Where-Object Key -eq 'DASH.HOST').SortIndex
       $time1 = ($json.MonitorItems | Where-Object Key -eq 'DASH.Time').SortIndex
       Write-Host "DRAG: DASH.HOST=$host1 DASH.Time=$time1"
@@ -207,7 +207,7 @@ if ($p) {
       if ($ua -and $ub) {
         $r1 = $ua.Current.BoundingRectangle; $r2 = $ub.Current.BoundingRectangle
         Drag-MouseY ([int]($r1.X + $r1.Width / 2)) ([int]($r1.Y + $r1.Height / 2)) ([int]($r2.Y - 4))
-        $json = Get-Content "$Data\settings.json" -Raw | ConvertFrom-Json
+        $json = Get-Content "$Dir\settings.json" -Raw | ConvertFrom-Json
         $d = ($json.MonitorItems | Where-Object Key -eq 'DASH.Uptime').SortIndex; $h = ($json.MonitorItems | Where-Object Key -eq 'HALO.Mouse').SortIndex
         Write-Host "DRAG CATEGORY UP: DASH.Uptime=$d HALO.Mouse=$h"
         Shot $win 'settings-items-category-up' 0 $true
@@ -222,7 +222,7 @@ if ($p) {
       if ($ca -and $cb) {
         $r1 = $ca.Current.BoundingRectangle; $r2 = $cb.Current.BoundingRectangle
         Drag-Mouse ([int]($r1.X + $r1.Width / 2)) ([int]($r1.Y + $r1.Height / 2)) ([int]($r2.Y + $r2.Height + 12))
-        $json = Get-Content "$Data\settings.json" -Raw | ConvertFrom-Json
+        $json = Get-Content "$Dir\settings.json" -Raw | ConvertFrom-Json
         $d = ($json.MonitorItems | Where-Object Key -eq 'DASH.Uptime').SortIndex; $h = ($json.MonitorItems | Where-Object Key -eq 'HALO.Mouse').SortIndex
         Write-Host "DRAG CATEGORY DOWN: DASH.Uptime=$d HALO.Mouse=$h"
         Shot $win 'settings-items-category-dragged' 0 $true

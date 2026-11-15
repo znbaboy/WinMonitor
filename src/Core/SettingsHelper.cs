@@ -10,7 +10,7 @@ namespace WinMonitor
     public static class SettingsHelper
     {
         // Cache path
-        private static readonly string _cachedPath = Path.Combine(AppInfo.DataDir, "settings.json");
+        private static readonly string _cachedPath = AppInfo.SettingsFile;
         private static readonly string _backupPath = Path.Combine(AppInfo.DataDir, "settings.json.bak");
         private static readonly string _tempPath = Path.Combine(AppInfo.DataDir, "settings.json.tmp");
         private static readonly object _ioLock = new object();
@@ -56,7 +56,10 @@ namespace WinMonitor
                 s.Skin = ThemeManager.SystemMode;                                                 // theme file missing: follow Windows
 
             s.InternAllStrings();
-            
+
+            // first start: write settings.json next to the exe straight away
+            if (!File.Exists(FilePath)) { try { s.Save(); } catch { } }
+
             return s;
         }
 

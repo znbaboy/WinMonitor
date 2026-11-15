@@ -145,6 +145,10 @@ $p = Start-App $null @('--open', 'settings')
 if ($p) { Window $p 'Settings - WinMonitor' 'settings-panel' }
 $p = Start-App $null @('--open', 'settings:Items')
 if ($p) { Window $p 'Settings - WinMonitor' 'settings-items' }
+$env:WINMONITOR_EXPAND_ALL = '1'
+$p = Start-App '{ "DisabledGroups": ["GPU"] }' @('--open', 'settings:Items')
+if ($p) { Window $p 'Settings - WinMonitor' 'settings-items-expanded' 900 1000 }
+$env:WINMONITOR_EXPAND_ALL = $null
 $p = Start-App $null @('--open', 'settings:Hardware')
 if ($p) { Start-Sleep 5; Window $p 'Settings - WinMonitor' 'settings-hardware' }
 $p = Start-App $null @('--open', 'settings:About')

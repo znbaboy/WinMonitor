@@ -274,55 +274,60 @@ namespace WinMonitor.UI
         private MenuEntry Toggle(string text, bool value, Action<bool> set, Action? apply) =>
             MenuEntry.Item(text, () => { set(!value); Cfg.Save(); apply?.Invoke(); }, value);
 
-        /// <summary>The "Monitor Items" submenu: one entry per item; network, disk and traffic switch as a group.</summary>
+        /// <summary>The "Monitor Items" submenu: one submenu per category, with its on/off switch first.</summary>
         private List<MenuEntry> BuildItemsMenu()
         {
             var list = new List<MenuEntry>();
-            var groups = Cfg.MonitorItems.OrderBy(x => x.SortIndex).GroupBy(x => x.UIGroup);
-            var groupToggles = new HashSet<string> { "DISK", "NET", "DATA" };
-
-            MenuEntry ItemEntry(MonitorItemConfig item)
-            {
-                string label = MetricLabelResolver.ResolveLabel(item);
-                if (string.IsNullOrEmpty(label))
-                {
-                    label = T(UIUtils.Intern("Items." + item.Key));
-                    if (label.StartsWith("Items.")) label = item.Key;
-                }
-                return MenuEntry.Item(label, () =>
-                {
-                    item.VisibleInPanel = !item.VisibleInPanel;
-                    Cfg.Save();
-                    ApplyMonitorLayout();
-                    if (item.VisibleInPanel) RemindCalibration(item, label);
-                }, item.VisibleInPanel);
-            }
-
+            var groups = Cfg.MonitorItems.GroupBy(x => x.UIGroup).OrderBy(g => g.Min(x => x.SortIndex));
             foreach (var g in groups)
             {
-                string name = Cfg.GroupAliases.TryGetValue(g.Key, out var alias) ? alias : T(UIUtils.Intern("Groups." + g.Key));
-                if (g.Key == "BAT")
-                    list.Add(MenuEntry.Sub(name, g.Select(ItemEntry).ToList()));
-                else if (groupToggles.Contains(g.Key))
+                string key = g.Key;
+                bool on = Cfg.IsGroupEnabled(key);
+                var sub = new List<MenuEntry>
                 {
-                    bool any = g.Any(x => x.VisibleInPanel);
-                    var items = g.ToList();
-                    list.Add(MenuEntry.Item(name, () =>
+                    MenuEntry.Item("Show this category", () => { SetGroupEnabled(key, !on); }, on),
+                    MenuEntry.Separator,
+                };
+                foreach (var item in g.OrderBy(x => x.SortIndex))
+                {
+                    var it = item;
+                    string label = ItemName(it);
+                    sub.Add(new MenuEntry
                     {
-                        foreach (var i in items) i.VisibleInPanel = !any;
-                        Cfg.Save();
-                        ApplyMonitorLayout();
-                    }, any));
+                        Text = label,
+                        Checked = it.VisibleInPanel,
+                        Enabled = on,
+                        Click = () =>
+                        {
+                            it.VisibleInPanel = !it.VisibleInPanel;
+                            Cfg.Save();
+                            ApplyMonitorLayout();
+                            if (it.VisibleInPanel) RemindCalibration(it, label);
+                        },
+                    });
                 }
-                else
-                {
-                    list.Add(MenuEntry.Header(name));
-                    list.AddRange(g.Select(ItemEntry));
-                }
-                list.Add(MenuEntry.Separator);
+                list.Add(new MenuEntry { Text = GroupName(key), Items = sub, Checked = on });
             }
-            if (list.Count > 0 && list[^1].IsSeparator) list.RemoveAt(list.Count - 1);
             return list;
+        }
+
+        public string GroupName(string key) =>
+            Cfg.GroupAliases.TryGetValue(key, out var alias) ? alias : T(UIUtils.Intern("Groups." + key));
+
+        public static string ItemName(MonitorItemConfig item)
+        {
+            string label = MetricLabelResolver.ResolveLabel(item);
+            if (string.IsNullOrWhiteSpace(label)) label = T(UIUtils.Intern("Items." + item.Key));
+            return label.StartsWith("Items.") ? item.Key : label;
+        }
+
+        /// <summary>Switches a whole category on or off (its rows keep their own ticks).</summary>
+        public void SetGroupEnabled(string group, bool on)
+        {
+            Cfg.DisabledGroups.Remove(group);
+            if (!on) Cfg.DisabledGroups.Add(group);
+            Cfg.Save();
+            ApplyMonitorLayout();
         }
 
         /// <summary>First time a clock / power / fan item is switched on: offer to set its real maximum.</summary>

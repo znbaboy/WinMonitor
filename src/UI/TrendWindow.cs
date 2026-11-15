@@ -157,7 +157,7 @@ namespace WinMonitor.UI
                     .OrderBy(p => p.Time).ToList(),
             }).Where(s => s.Points.Count > 0).ToList();
 
-            bool enabled = _cfg.MonitorItems.Any(i => Categories[_category].Keys.Contains(i.Key) && i.VisibleInPanel);
+            bool enabled = _cfg.MonitorItems.Any(i => Categories[_category].Keys.Contains(i.Key) && _cfg.IsShown(i));
             _empty.Text = _series.Count > 0 ? "" : enabled ? "No history yet: values are recorded every 10 seconds while WinMonitor runs."
                                                            : "Switch on a matching monitor item to record its history.";
             Draw();

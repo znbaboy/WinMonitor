@@ -343,7 +343,7 @@ namespace WinMonitor
 
         public static bool IsAnyEnabled(this Settings settings, string keyPrefix)
         {
-            return settings.MonitorItems.Any(x => x.Key.StartsWith(keyPrefix, StringComparison.OrdinalIgnoreCase) && x.VisibleInPanel);
+            return settings.MonitorItems.Any(x => x.Key.StartsWith(keyPrefix, StringComparison.OrdinalIgnoreCase) && settings.IsShown(x));
         }
 
         public static void UpdateMaxRecord(this Settings settings, string key, float val)

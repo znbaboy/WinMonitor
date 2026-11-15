@@ -191,7 +191,7 @@ namespace WinMonitor.Core
             {
                 bool enabled = cfg.MonitorItems.Any(item =>
                     item.Key.Equals(key, StringComparison.OrdinalIgnoreCase) &&
-                    item.VisibleInPanel);
+                    cfg.IsShown(item));
 
                 if (enabled) yield return key;
             }

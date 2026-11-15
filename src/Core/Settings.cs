@@ -87,6 +87,14 @@ namespace WinMonitor
 
         public Dictionary<string, string> GroupAliases { get; set; } = new Dictionary<string, string>();
 
+        /// <summary>Categories switched off: their rows are hidden (and not read) but keep their own choices.</summary>
+        public List<string> DisabledGroups { get; set; } = new List<string>();
+
+        public bool IsGroupEnabled(string group) => !DisabledGroups.Contains(group);
+
+        /// <summary>Is this row on the panel? Ticked, and its category is on.</summary>
+        public bool IsShown(MonitorItemConfig item) => item.VisibleInPanel && IsGroupEnabled(item.UIGroup);
+
         // show the "WinMonitor" title at the top of the panel
         public bool ShowTitle { get; set; } = true;
 

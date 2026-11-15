@@ -135,7 +135,7 @@ namespace WinMonitor.UI
 
         // ------------------------------------------------------------------ metrics
         private IEnumerable<MonitorItemConfig> VisibleItems() => _cfg.MonitorItems
-            .Where(x => x.VisibleInPanel)
+            .Where(_cfg.IsShown)
             .GroupBy(x => x.UIGroup)                  // keep each group together
             .OrderBy(g => g.Min(x => x.SortIndex))    // groups in the user's order
             .SelectMany(g => g.OrderBy(x => x.SortIndex));

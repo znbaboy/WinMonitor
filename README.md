@@ -17,9 +17,8 @@ Free and open source (MIT). Portable: unzip and run.
 ## Screenshots
 
 <p>
-<img src="docs/screenshots/settings.png" width="32%" alt="Settings">
-<img src="docs/screenshots/monitor-items.png" width="32%" alt="Monitor Items">
-<img src="docs/screenshots/theme-editor.png" width="32%" alt="Theme editor">
+<img src="docs/screenshots/monitor-items.png" width="49%" alt="Monitor Items">
+<img src="docs/screenshots/settings.png" width="49%" alt="Settings">
 </p>
 
 ## Install

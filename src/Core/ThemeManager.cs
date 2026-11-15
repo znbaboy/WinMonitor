@@ -170,11 +170,34 @@ namespace WinMonitor.Core
         private static readonly Dictionary<string, Color> _colorCache = new(32);
         private static readonly object _lock = new object(); 
 
-        /// <summary>True when the panel should be dark: "Dark", or "System" with Windows apps set to dark.</summary>
-        public static bool IsDark(string mode)
+        public const string SystemMode = "System", DarkDefault = "Windows11_Dark", LightDefault = "Windows11_Light";
+
+        public static string ThemeDir
         {
-            if (mode == "Dark") return true;
-            if (mode == "Light") return false;
+            get
+            {
+                var dir = Path.Combine(AppContext.BaseDirectory, "resources", "themes");
+                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                return dir;
+            }
+        }
+
+        /// <summary>Theme file names (without .json), the two Windows 11 defaults first.</summary>
+        public static IEnumerable<string> GetAvailableThemes()
+        {
+            EnsureDefaults();
+            try
+            {
+                var names = Directory.EnumerateFiles(ThemeDir, "*.json").Select(f => Path.GetFileNameWithoutExtension(f)!).ToList();
+                return names.Where(n => n == DarkDefault || n == LightDefault).OrderBy(n => n == LightDefault)
+                            .Concat(names.Where(n => n != DarkDefault && n != LightDefault).OrderBy(n => n)).ToArray();
+            }
+            catch { return new[] { DarkDefault, LightDefault }; }
+        }
+
+        /// <summary>Windows apps set to dark?</summary>
+        public static bool WindowsIsDark()
+        {
             try
             {
                 using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
@@ -183,38 +206,92 @@ namespace WinMonitor.Core
             catch { return true; }
         }
 
-        /// <summary>Builds the Windows 11 style theme (light or dark) and makes it current.</summary>
-        public static Theme Load(string mode)
+        /// <summary>The theme file a setting means: "System" picks the Windows 11 light or dark one.</summary>
+        public static string Resolve(string skin) =>
+            string.IsNullOrEmpty(skin) || skin == SystemMode ? (WindowsIsDark() ? DarkDefault : LightDefault) : skin;
+
+        /// <summary>Should menus and windows be dark for this setting? (custom themes: by background brightness)</summary>
+        public static bool IsDark(string skin)
         {
-            Current = IsDark(mode) ? Windows11Dark() : Windows11Light();
-            return Current;
+            var name = Resolve(skin);
+            if (name == DarkDefault) return true;
+            if (name == LightDefault) return false;
+            var c = ParseColor((name == Current.Name ? Current : TryRead(name) ?? Current).Color.Background);
+            return (0.299 * c.R + 0.587 * c.G + 0.114 * c.B) < 128;
         }
 
+        private static readonly JsonSerializerOptions ReadOptions = new() { PropertyNameCaseInsensitive = true, IgnoreReadOnlyProperties = true, AllowTrailingCommas = true };
+
+        private static Theme? TryRead(string name)
+        {
+            try
+            {
+                var path = Path.Combine(ThemeDir, name + ".json");
+                return File.Exists(path) ? JsonSerializer.Deserialize<Theme>(File.ReadAllText(path), ReadOptions) : null;
+            }
+            catch { return null; }
+        }
+
+        /// <summary>Loads a theme ("System" or a file name) and makes it current. Falls back to the Windows 11 defaults.</summary>
+        public static Theme Load(string skin)
+        {
+            EnsureDefaults();
+            string name = Resolve(skin);
+            var theme = TryRead(name) ?? (WindowsIsDark() || name == DarkDefault ? Windows11Dark() : Windows11Light());
+            if (string.IsNullOrEmpty(theme.Name)) theme.Name = name;
+            theme.Font.Family = UIUtils.Intern(theme.Font.Family ?? "");
+            theme.Font.ValueFamily = UIUtils.Intern(theme.Font.ValueFamily ?? "");
+            Current = theme;
+            return theme;
+        }
+
+        /// <summary>Puts the two Windows 11 theme files back if they were deleted.</summary>
+        private static void EnsureDefaults()
+        {
+            try
+            {
+                foreach (var (name, make) in new (string, Func<Theme>)[] { (DarkDefault, Windows11Dark), (LightDefault, Windows11Light) })
+                {
+                    var path = Path.Combine(ThemeDir, name + ".json");
+                    if (!File.Exists(path)) File.WriteAllText(path, JsonSerializer.Serialize(make(), new JsonSerializerOptions { WriteIndented = true }));
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>Makes a theme object the current one (the theme editor's live preview).</summary>
+        public static void SetCurrent(Theme theme) => Current = theme;
+
+        /// <summary>A deep copy (themes are scaled in place when applied).</summary>
+        public static Theme Clone(Theme theme) =>
+            JsonSerializer.Deserialize<Theme>(JsonSerializer.Serialize(theme)) ?? new Theme();
+
+        // The defaults, also written to resources/themes when missing.
         private static Theme Base() => new()
         {
             Version = 3,
             Layout = new LayoutConfig
             {
-                RowHeight = 40, Padding = 12, CornerRadius = 8, GroupRadius = 6, GroupPadding = 8,
-                GroupSpacing = 30, GroupBottom = 0, ItemGap = 6, GroupTitleOffset = 6,
+                Width = 240, LayoutScale = 1, RowHeight = 38, Padding = 10, CornerRadius = 8, GroupRadius = 4, GroupPadding = 10,
+                GroupSpacing = 30, GroupBottom = 0, ItemGap = 4, GroupTitleOffset = 6,
             },
             Font = new FontConfig
             {
-                Family = "Segoe UI Variable Text", ValueFamily = "Segoe UI Variable Text",
-                Title = 11, Group = 10, Item = 10, Value = 11, Bold = true,
+                Family = "Segoe UI Variable Text", ValueFamily = "Segoe UI Semibold",
+                Title = 10.5, Group = 9.5, Item = 9.5, Value = 11, Bold = false,
             },
         };
 
         private static Theme Windows11Dark()
         {
             var t = Base();
-            t.Name = "Windows 11 Dark";
+            t.Name = DarkDefault;
             t.Color = new ColorConfig
             {
-                Background = "#202020", GroupBackground = "#2C2C2C",
+                Background = "#202020", GroupBackground = "#2B2B2B",
                 TextTitle = "#FFFFFF", TextGroup = "#C5C5C5", TextPrimary = "#FFFFFF",
-                ValueSafe = "#6CCB5F", ValueWarn = "#FCE100", ValueCrit = "#FF99A4",
-                BarBackground = "#3D3D3D", BarLow = "#6CCB5F", BarMid = "#FCE100", BarHigh = "#FF99A4",
+                ValueSafe = "#FFFFFF", ValueWarn = "#FCE100", ValueCrit = "#FF99A4",
+                BarBackground = "#454545", BarLow = "#60CDFF", BarMid = "#FCE100", BarHigh = "#FF99A4",
             };
             return t;
         }
@@ -222,13 +299,13 @@ namespace WinMonitor.Core
         private static Theme Windows11Light()
         {
             var t = Base();
-            t.Name = "Windows 11 Light";
+            t.Name = LightDefault;
             t.Color = new ColorConfig
             {
                 Background = "#F3F3F3", GroupBackground = "#FFFFFF",
                 TextTitle = "#1A1A1A", TextGroup = "#5D5D5D", TextPrimary = "#1A1A1A",
-                ValueSafe = "#0F7B0F", ValueWarn = "#9D5D00", ValueCrit = "#C42B1C",
-                BarBackground = "#E5E5E5", BarLow = "#0F7B0F", BarMid = "#9D5D00", BarHigh = "#C42B1C",
+                ValueSafe = "#1A1A1A", ValueWarn = "#9D5D00", ValueCrit = "#C42B1C",
+                BarBackground = "#D9D9D9", BarLow = "#005FB8", BarMid = "#9D5D00", BarHigh = "#C42B1C",
             };
             return t;
         }

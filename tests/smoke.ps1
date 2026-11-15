@@ -106,12 +106,19 @@ if ($p) {
   Start-Sleep 6
   if (-not $p2.HasExited) { Stop-Process $p2 -Force; Fail 'second instance did not exit' } else { Ok 'single instance' }
   if ($p.HasExited) { Fail 'first instance died after the second launch' }
+
+  # memory after idling (the app trims itself; Task Manager's "Memory" column is the private working set)
+  Start-Sleep 50
+  $pws = (Get-Counter '\Process(WinMonitor)\Working Set - Private').CounterSamples[0].CookedValue / 1MB
+  $proc = Get-Process WinMonitor | Select-Object -First 1
+  "MEMORY: private working set {0:N1} MB, working set {1:N1} MB, private bytes {2:N1} MB" -f $pws, ($proc.WorkingSet64 / 1MB), ($proc.PrivateMemorySize64 / 1MB) | Write-Host
+  if ($pws -gt 45) { Fail ("private working set {0:N1} MB is above 45 MB" -f $pws) } else { Ok ("memory {0:N1} MB" -f $pws) }
 }
 
 # ---------------------------------------------------------------- 2. light and dark looks
-$p = Start-App '{ "Skin": "Light", "AutoHide": false, "UIScale": 0.85 }'
+$p = Start-App '{ "Skin": "Windows11_Light", "AutoHide": false, "UIScale": 0.85 }'
 if ($p) { $h = Panel $p; if ($h) { Shot $h 'panel-light' 24; Ok 'light look' } else { Fail 'light look: no panel' } }
-$p = Start-App '{ "Skin": "Dark", "Opacity": 0.6, "PanelWidth": 300, "AutoHide": false, "UIScale": 0.85 }'
+$p = Start-App '{ "Skin": "Windows11_Dark", "Opacity": 0.6, "PanelWidth": 300, "AutoHide": false, "UIScale": 0.85 }'
 if ($p) { $h = Panel $p; if ($h) { Shot $h 'panel-dark-60' 24; Ok 'dark look, 60% opacity' } else { Fail 'dark look: no panel' } }
 
 # ---------------------------------------------------------------- 4. click-through
@@ -141,6 +148,8 @@ $p = Start-App $null @('--open', 'history')
 if ($p) { Window $p 'Monitor History' 'history' }
 $p = Start-App $null @('--open', 'hardware')
 if ($p) { Window $p 'Hardware Info' 'hardware-info' }
+$p = Start-App $null @('--open', 'themes')
+if ($p) { Window $p 'Theme Editor' 'theme-editor' }
 Stop-App
 
 # ---------------------------------------------------------------- 6. errors

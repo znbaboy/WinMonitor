@@ -56,12 +56,29 @@ namespace WinMonitor.UI
         // ------------------------------------------------------------------ fonts & brushes
         private static double Pt(double pt) => Math.Max(1, pt * 96.0 / 72.0 * T.UserScale);
         private static int LineH(double pt) => (int)Math.Ceiling(Pt(pt) * 1.33);
-        private static FontFamily Family(bool value)
+        // GDI-style names that carry a weight ("Segoe UI Semibold") are split into family + weight for WinUI
+        private static readonly (string Suffix, FontWeight Weight)[] WeightSuffixes =
         {
-            var f = value && !string.IsNullOrWhiteSpace(T.Font.ValueFamily) ? T.Font.ValueFamily : T.Font.Family;
-            return new FontFamily(string.IsNullOrWhiteSpace(f) ? "Segoe UI" : f + ", Segoe UI, Segoe UI Emoji");
+            (" Semibold", FontWeights.SemiBold), (" SemiBold", FontWeights.SemiBold), (" Semilight", FontWeights.SemiLight),
+            (" Bold", FontWeights.Bold), (" Light", FontWeights.Light), (" Black", FontWeights.Black), (" Medium", FontWeights.Medium),
+        };
+        private readonly Dictionary<string, FontFamily> _families = new();
+
+        private (FontFamily Family, FontWeight Weight) Font(bool value)
+        {
+            var f = (value && !string.IsNullOrWhiteSpace(T.Font.ValueFamily) ? T.Font.ValueFamily : T.Font.Family)?.Trim() ?? "";
+            var w = T.Font.Bold ? FontWeights.Bold : FontWeights.Normal;
+            foreach (var (suffix, weight) in WeightSuffixes)
+            {
+                if (!f.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) continue;
+                f = f[..^suffix.Length];
+                if (!T.Font.Bold || weight.Weight > w.Weight) w = weight;
+                break;
+            }
+            string key = string.IsNullOrEmpty(f) ? "Segoe UI" : f + ", Segoe UI, Segoe UI Emoji";
+            if (!_families.TryGetValue(key, out var fam)) _families[key] = fam = new FontFamily(key);
+            return (fam, w);
         }
-        private static FontWeight Weight => T.Font.Bold ? FontWeights.SemiBold : FontWeights.Normal;
 
         private SolidColorBrush Brush(Color c)
         {
@@ -76,9 +93,9 @@ namespace WinMonitor.UI
             return new TextBlock
             {
                 Text = text,
-                FontFamily = Family(valueFont),
+                FontFamily = Font(valueFont).Family,
                 FontSize = Pt(pt),
-                FontWeight = Weight,
+                FontWeight = Font(valueFont).Weight,
                 Foreground = Brush(color),
                 TextWrapping = TextWrapping.NoWrap,
                 TextTrimming = TextTrimming.None,

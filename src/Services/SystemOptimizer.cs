@@ -18,6 +18,17 @@ namespace WinMonitor.Services
         /// <summary>
         /// 修剪当前进程的工作集内存
         /// </summary>
+        /// <summary>Collects garbage and trims shortly after (e.g. when a window closed).</summary>
+        public static void TrimSoon()
+        {
+            System.Threading.Tasks.Task.Delay(2000).ContinueWith(_ =>
+            {
+                GC.Collect(2, GCCollectionMode.Forced, true, true);
+                GC.WaitForPendingFinalizers();
+                TrimWorkingSet();
+            });
+        }
+
         public static void TrimWorkingSet()
         {
             try
@@ -46,14 +57,13 @@ namespace WinMonitor.Services
                 GC.Collect(2, GCCollectionMode.Optimized);
             }
 
-            // 3. 内存硬清理: 每 300 秒 (5分钟) (Offset 45s)
-            if (secondsCounter % 300 == 45)
+            // 3. trim the working set every 60 s when above 24 MB
+            if (secondsCounter % 60 == 45)
             {
                 try
                 {
                     using var proc = Process.GetCurrentProcess();
-                    // 阈值 30MB，确保极致轻量
-                    if (proc.WorkingSet64 > 30 * 1024 * 1024) 
+                    if (proc.WorkingSet64 > 24 * 1024 * 1024) 
                     {
                         EmptyWorkingSet(proc.Handle);
                     }

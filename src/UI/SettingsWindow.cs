@@ -73,8 +73,7 @@ namespace WinMonitor.UI
                 Ui.PageTitle(T("Menu.MainFormSettings")),
 
                 Ui.Section(T("Menu.Appearance")),
-                Ui.Row(T("Menu.Theme"), Ui.Combo(AppHost.ThemeModes.Select(m => m.Label), Array.FindIndex(AppHost.ThemeModes, m => m.Key == c.Skin),
-                    i => { c.Skin = AppHost.ThemeModes[i].Key; Save(); _app.ApplyAppTheme(); }), "Windows 11 style, light or dark."),
+                Ui.Row(T("Menu.Theme"), ThemeRow(c)),
                 Ui.Row(T("Menu.Width"), Ui.NumberUnit(c.PanelWidth, 100, 10000, "px",
                     v => { c.PanelWidth = (int)v; Save(); _app.ApplyThemeAndLayout(retainData: true); }, 10)),
                 Ui.Row(T("Menu.Opacity"), Ui.Combo(opacities.Select(o => $"{o * 100:0}%"), Array.FindIndex(opacities, o => Math.Abs(o - c.Opacity) < 0.01),
@@ -104,6 +103,18 @@ namespace WinMonitor.UI
                 Ui.Row(T("Menu.DevicesReport"), Ui.Button(T("Menu.DevicesReportCopy"), CopyDeviceReport),
                     "What each device reader saw, for troubleshooting a device that does not show.")
             );
+        }
+
+        private FrameworkElement ThemeRow(Settings c)
+        {
+            var keys = new List<string> { ThemeManager.SystemMode };
+            keys.AddRange(ThemeManager.GetAvailableThemes());
+            var labels = keys.Select(k => k == ThemeManager.SystemMode ? AppHost.SystemThemeLabel : k);
+            var p = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            p.Children.Add(Ui.Combo(labels, Math.Max(0, keys.FindIndex(k => k.Equals(c.Skin, StringComparison.OrdinalIgnoreCase))),
+                i => _app.SetTheme(keys[i]), 300));
+            p.Children.Add(Ui.Button(T("Menu.ThemeEditor"), _app.OpenThemeEditor));
+            return p;
         }
 
         private void CopyDeviceReport()

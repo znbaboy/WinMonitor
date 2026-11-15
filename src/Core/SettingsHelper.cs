@@ -50,7 +50,10 @@ namespace WinMonitor
             
             // [Cleanup] actions 3 (traffic history) and 5 (web display) no longer exist
             if (s.MainFormDoubleClickAction is not (1 or 2 or 5)) s.MainFormDoubleClickAction = 2;   // removed actions open Settings
-            if (s.Skin is not ("System" or "Light" or "Dark")) s.Skin = "System";               // old theme files are gone
+            if (s.Skin == "Dark") s.Skin = ThemeManager.DarkDefault;                              // build 4 settings
+            else if (s.Skin == "Light") s.Skin = ThemeManager.LightDefault;
+            if (s.Skin != ThemeManager.SystemMode && !File.Exists(Path.Combine(ThemeManager.ThemeDir, s.Skin + ".json")))
+                s.Skin = ThemeManager.SystemMode;                                                 // theme file missing: follow Windows
 
             s.InternAllStrings();
             

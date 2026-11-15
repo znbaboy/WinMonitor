@@ -27,6 +27,10 @@
     <Product>WinMonitor</Product>
     <Description>Hardware and wireless-device battery monitor</Description>
     <DebugType>none</DebugType>
+    <!-- Lean memory: workstation GC without the background GC thread, compact heap -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <TieredPGO>false</TieredPGO>
   </PropertyGroup>
 
   <ItemGroup>
@@ -38,7 +42,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="7" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Include="Assets\**" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="resources\themes\*.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="resources\lang\*.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="LICENSE;THIRD-PARTY-NOTICES.txt" CopyToOutputDirectory="PreserveNewest" />
     <Compile Remove="tests\**" />

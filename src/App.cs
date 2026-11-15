@@ -20,9 +20,19 @@ namespace WinMonitor
 
         protected override void OnLaunched(LaunchActivatedEventArgs args)
         {
-            Resources.MergedDictionaries.Add(new XamlControlsResources());
+            // The control styles (about 10 MB) load only when a normal window first opens: the panel does not need them.
             DispatcherShutdownMode = DispatcherShutdownMode.OnExplicitShutdown;   // the panel can be hidden; the app keeps running
             _host = new AppHost(Settings.Load());
+        }
+
+        private static bool _controls;
+
+        /// <summary>Loads the WinUI control styles (once), before the first settings-type window is built.</summary>
+        public static void EnsureControlResources()
+        {
+            if (_controls) return;
+            _controls = true;
+            Current.Resources.MergedDictionaries.Add(new XamlControlsResources());
         }
 
         public IXamlType GetXamlType(Type type) => _provider.GetXamlType(type);

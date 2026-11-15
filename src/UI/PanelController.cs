@@ -64,6 +64,17 @@ namespace WinMonitor.UI
             Render();
         }
 
+        /// <summary>Shows a theme object straight away (the theme editor's live preview).</summary>
+        public void PreviewTheme(Theme edited)
+        {
+            var theme = ThemeManager.Clone(edited);
+            ThemeManager.SetCurrent(theme);
+            theme.Scale(1f, (float)_cfg.UIScale);
+            theme.Layout.Width = (int)(_cfg.PanelWidth * _cfg.UIScale);
+            _layoutDirty = true;
+            Render();
+        }
+
         public void RebuildLayout()
         {
             BuildMetrics();

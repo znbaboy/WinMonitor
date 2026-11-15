@@ -23,6 +23,8 @@ namespace WinMonitor.UI
 
         protected ToolWindow(string title, int widthDip, int heightDip)
         {
+            App.EnsureControlResources();
+            Closed += (_, _) => Services.SystemOptimizer.TrimSoon();   // give the window's memory back
             Title = title;
             Hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
             AppWindow.SetIcon(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "app.ico"));

@@ -37,7 +37,7 @@ jobs:
         shell: pwsh
         run: |
           $d = 'publish/WinMonitor'
-          foreach ($f in 'WinMonitor.exe', 'WinMonitor.pri', 'Microsoft.WindowsAppRuntime.dll', 'LibreHardwareMonitorLib.dll',
+          foreach ($f in 'resources/themes/Windows11_Dark.json', 'resources/themes/Windows11_Light.json', 'WinMonitor.exe', 'WinMonitor.pri', 'Microsoft.WindowsAppRuntime.dll', 'LibreHardwareMonitorLib.dll',
                          'resources/lang/en.json', 'Assets/app.ico', 'LICENSE', 'THIRD-PARTY-NOTICES.txt') {
             if (-not (Test-Path "$d/$f")) { throw "$f missing from the publish output" }
           }

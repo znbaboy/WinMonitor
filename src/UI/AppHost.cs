@@ -62,7 +62,7 @@ namespace WinMonitor.UI
             Panel.ApplyAttributes();
             if (cfg.HideMainForm) Panel.HidePanel();
 
-            // --open settings[:Page] | history | hardware  (shortcuts; also used by the automated tests)
+            // --open settings[:Page] | history | hardware | themes  (shortcuts; also used by the automated tests)
             var args = Environment.GetCommandLineArgs();
             int oi = Array.IndexOf(args, "--open");
             if (oi >= 0 && oi + 1 < args.Length)
@@ -82,6 +82,7 @@ namespace WinMonitor.UI
                 case "settings": OpenSettings(parts.Length > 1 ? parts[1] : null); break;
                 case "history": OpenTrend(); break;
                 case "hardware": OpenHardwareInfo(); break;
+                case "themes": OpenThemeEditor(); break;
             }
         }
 
@@ -134,10 +135,10 @@ namespace WinMonitor.UI
         /// <summary>Light or dark everywhere: panel, menus and windows.</summary>
         public void ApplyAppTheme()
         {
+            ApplyThemeAndLayout(retainData: true);
             bool dark = ThemeManager.IsDark(Cfg.Skin);
             PopupMenu.UseDarkMenus(dark);
             ThemeChanged?.Invoke(dark);
-            ApplyThemeAndLayout(retainData: true);
         }
 
         /// <summary>Raised with "dark?" when the look changes; open windows follow it.</summary>
@@ -174,6 +175,7 @@ namespace WinMonitor.UI
         private SettingsWindow? _settings;
         private TrendWindow? _trend;
         private HardwareInfoWindow? _info;
+        private ThemeEditorWindow? _themeEditor;
 
         public void OpenSettings(string? page = null)
         {
@@ -198,13 +200,26 @@ namespace WinMonitor.UI
             _info.Activate();
         }
 
+        public void OpenThemeEditor()
+        {
+            if (_themeEditor == null) { _themeEditor = new ThemeEditorWindow(this); _themeEditor.Closed += (_, _) => { _themeEditor = null; ApplyAppTheme(); }; }
+            _themeEditor.Activate();
+        }
+
         // ------------------------------------------------------------------ menu
         // after the click or tray message has been handled, so the menu's own loop does not run inside it
         private void ShowMenu() => Panel.DispatcherQueue.TryEnqueue(() => PopupMenu.Show(Panel.Hwnd, BuildMenu()));
 
         private static string T(string key) => LanguageManager.T(key);
 
-        public static readonly (string Key, string Label)[] ThemeModes = { ("System", "Use Windows setting"), ("Light", "Light"), ("Dark", "Dark") };
+        public const string SystemThemeLabel = "Use Windows setting (Windows 11 light / dark)";
+
+        public void SetTheme(string skin)
+        {
+            Cfg.Skin = skin;
+            Cfg.Save();
+            ApplyAppTheme();
+        }
 
         private List<MenuEntry> BuildMenu()
         {
@@ -231,8 +246,16 @@ namespace WinMonitor.UI
             };
             m.Add(MenuEntry.Sub(T("Menu.MonitorItemDisplay"), BuildItemsMenu()));
             m.Add(MenuEntry.Sub(T("Menu.MainFormSettings"), mode));
-            m.Add(MenuEntry.Sub(T("Menu.Theme"), ThemeModes.Select(t =>
-                MenuEntry.Item(t.Label, () => { c.Skin = t.Key; c.Save(); ApplyAppTheme(); }, c.Skin == t.Key)).ToList()));
+            var themes = new List<MenuEntry>
+            {
+                MenuEntry.Item(SystemThemeLabel, () => SetTheme(ThemeManager.SystemMode), c.Skin == ThemeManager.SystemMode),
+                MenuEntry.Separator,
+            };
+            foreach (var name in ThemeManager.GetAvailableThemes())
+                themes.Add(MenuEntry.Item(name, () => SetTheme(name), name.Equals(c.Skin, StringComparison.OrdinalIgnoreCase)));
+            themes.Add(MenuEntry.Separator);
+            themes.Add(MenuEntry.Item(T("Menu.ThemeEditor"), OpenThemeEditor));
+            m.Add(MenuEntry.Sub(T("Menu.Theme"), themes));
             m.Add(MenuEntry.Separator);
 
             m.Add(MenuEntry.Item(T("Menu.HardwareInfo"), OpenHardwareInfo));

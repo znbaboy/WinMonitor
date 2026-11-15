@@ -12,11 +12,11 @@
     "BAT": "🔋Battery"
   },
   "Items": {
-    "HALO.Mouse": "Mouse",
-    "HALO.Keyboard": "Keyboard",
-    "HALO.Headset": "Headset",
-    "HALO.Controller": "Controller",
-    "HALO.Bluetooth": "Bluetooth",
+    "HALO.Mouse": "🖱️ Mouse",
+    "HALO.Keyboard": "⌨️ Keyboard",
+    "HALO.Headset": "🎧 Headset",
+    "HALO.Controller": "🎮 Controller",
+    "HALO.Bluetooth": "🔵 Bluetooth",
     "DASH.HOST": "Hostname",
     "DASH.Time": "Time",
     "DASH.IP": "Local IP",

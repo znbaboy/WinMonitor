@@ -15,7 +15,7 @@ Free and open source (MIT). Built with WinUI 3. Portable: unzip and run.
   - Xbox controllers (XInput, approximate levels)
   - Bluetooth devices that report a battery to Windows
   - Low battery alert, red and yellow rows near the limit, ⚡ while charging
-- **Look**: Windows 11 light and dark (follows Windows by default), width, scale, opacity, per-row bars, renamable rows and groups, custom units
+- **Look**: Windows 11 light and dark themes (follow Windows by default), your own themes with a live-preview editor, width, scale, opacity, per-row bars, renamable rows and groups, custom units
 - **Behaviour**: always on top, click-through, auto-hide at screen edges, keep on screen, remembers its place per monitor
 - **Alerts**: temperature and battery notifications
 - **History**: temperature, load, power and clock for up to 7 days, with CSV export
@@ -37,7 +37,7 @@ WinMonitor asks for administrator rights: Windows needs them for sensor access. 
 - **Settings → Monitor Items**: show, hide, rename, reorder rows, set units and switch bars on or off
 - **Settings → Panel → Wireless devices**: how often batteries are read, PlayStation over Bluetooth, and a device report for troubleshooting
 
-Shortcuts: `WinMonitor.exe --open settings`, `--open settings:Items`, `--open history`, `--open hardware`.
+Shortcuts: `WinMonitor.exe --open settings`, `--open settings:Items`, `--open history`, `--open hardware`, `--open themes`.
 
 ## Build
 

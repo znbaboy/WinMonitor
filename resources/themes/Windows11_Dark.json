@@ -1,0 +1,63 @@
+{
+  "Name": "Windows11_Dark",
+  "Version": 3,
+  "Layout": {
+    "Width": 240,
+    "LayoutScale": 1,
+    "RowHeight": 38,
+    "Padding": 10,
+    "CornerRadius": 8,
+    "GroupRadius": 4,
+    "GroupPadding": 10,
+    "GroupSpacing": 30,
+    "GroupBottom": 0,
+    "ItemGap": 4,
+    "GroupTitleOffset": 6
+  },
+  "Font": {
+    "Family": "Segoe UI Variable Text",
+    "ValueFamily": "Segoe UI Semibold",
+    "Title": 10.5,
+    "Group": 9.5,
+    "Item": 9.5,
+    "Value": 11,
+    "Bold": false,
+    "ItemSize": 0
+  },
+  "Thresholds": {
+    "Load": {
+      "Warn": 65,
+      "Crit": 85
+    },
+    "Temp": {
+      "Warn": 50,
+      "Crit": 70
+    },
+    "Vram": {
+      "Warn": 65,
+      "Crit": 85
+    },
+    "Mem": {
+      "Warn": 65,
+      "Crit": 85
+    },
+    "NetKBps": {
+      "Warn": 2097152,
+      "Crit": 8388608
+    }
+  },
+  "Color": {
+    "Background": "#202020",
+    "TextTitle": "#FFFFFF",
+    "TextGroup": "#C5C5C5",
+    "TextPrimary": "#FFFFFF",
+    "ValueSafe": "#FFFFFF",
+    "ValueWarn": "#FCE100",
+    "ValueCrit": "#FF99A4",
+    "BarBackground": "#454545",
+    "BarLow": "#60CDFF",
+    "BarMid": "#FCE100",
+    "BarHigh": "#FF99A4",
+    "GroupBackground": "#2B2B2B"
+  }
+}

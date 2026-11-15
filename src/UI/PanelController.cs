@@ -232,7 +232,7 @@ namespace WinMonitor.UI
             if ((DateTime.Now - _cfg.LastAlertTime).TotalMinutes < 3) return;
 
             int limit = _cfg.AlertTempThreshold;
-            int diskLimit = Math.Min(limit - 20, 60);
+            int diskLimit = _cfg.AlertDiskTempThreshold;
             string title = LanguageManager.T("Menu.AlertTemp");
             var lines = new List<string>();
 
@@ -243,18 +243,17 @@ namespace WinMonitor.UI
                 {
                     if (!_overheatStart.ContainsKey(key)) _overheatStart[key] = DateTime.Now;
                     if ((DateTime.Now - _overheatStart[key]).TotalSeconds >= 5)   // hot for 5 s, not a spike
-                        lines.Add($"{LanguageManager.T("Short." + key)} {title}: \U0001F525{val:F0}°C{suffix}");
+                        lines.Add($"{LanguageManager.T("Short." + key)}: \U0001F525{val:F0}°C (limit {threshold}°C)");
                 }
                 else _overheatStart.Remove(key);
             }
             Check("CPU.Temp", limit);
             Check("GPU.Temp", limit);
             Check("MOBO.Temp", limit);
-            Check("DISK.Temp", diskLimit, $" (>{diskLimit}°C)");
+            Check("DISK.Temp", diskLimit);
 
             if (lines.Count == 0) return;
-            string th = lines.Count == 1 && lines[0].StartsWith("Disk", StringComparison.OrdinalIgnoreCase) ? $"(>{diskLimit}°C)" : $"(>{limit}°C)";
-            Notify?.Invoke($"{title} {th}", string.Join("\n", lines));
+            Notify?.Invoke(title, string.Join("\n", lines));
             _cfg.LastAlertTime = DateTime.Now;
         }
 

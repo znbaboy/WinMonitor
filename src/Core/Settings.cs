@@ -78,6 +78,7 @@ namespace WinMonitor
         
         public bool AlertTempEnabled { get; set; } = true;
         public int AlertTempThreshold { get; set; } = 80;
+        public int AlertDiskTempThreshold { get; set; } = 70;   // disks have their own limit
 
         
         public ThresholdsSet Thresholds { get; set; } = new ThresholdsSet();

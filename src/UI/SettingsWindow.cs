@@ -318,8 +318,9 @@ namespace WinMonitor.UI
                 Ui.PageTitle(T("Menu.Thresholds")),
                 Ui.Section(T("Menu.AlertTemp")),
                 Ui.Row(T("Menu.AlertTemp"), Ui.Toggle(c.AlertTempEnabled, v => { c.AlertTempEnabled = v; Save(); }),
-                    "A notification when CPU, GPU or motherboard stay at or above the limit for 5 seconds (disks: 20 °C lower, at most 60 °C)."),
-                Ui.Row(T("Menu.AlertThreshold"), Ui.NumberUnit(c.AlertTempThreshold, 30, 120, "°C", v => { c.AlertTempThreshold = (int)v; Save(); })),
+                    "A notification when a temperature stays at or above its limit for 5 seconds (then at most every 3 minutes)."),
+                Ui.Row("CPU, GPU and motherboard limit", Ui.NumberUnit(c.AlertTempThreshold, 30, 120, "°C", v => { c.AlertTempThreshold = (int)v; Save(); })),
+                Ui.Row("Disk limit", Ui.NumberUnit(c.AlertDiskTempThreshold, 30, 100, "°C", v => { c.AlertDiskTempThreshold = (int)v; Save(); })),
 
                 Ui.Section(T("Menu.AlertBattery")),
                 Ui.Row(T("Menu.AlertBattery"), Ui.Toggle(c.AlertBatteryEnabled, v => { c.AlertBatteryEnabled = v; Save(); }),

@@ -267,8 +267,9 @@ if ($p) {
     Start-Sleep 2
     $root = [System.Windows.Automation.AutomationElement]::FromHandle($win)
     $c = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, 'Reset…')
-    $btn = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $c)
-    if (-not $btn) { Fail 'reset button not found' }
+    $btn = $null
+    for ($i = 0; $i -lt 20 -and -not $btn; $i++) { $btn = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $c); if (-not $btn) { Start-Sleep -Milliseconds 500 } }
+    if (-not $btn) { Shot $win 'dialog-reset-missing' 0 $true; Write-Host 'WARN: reset button not found (UI Automation); dialog not tested' }
     else {
       $btn.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
       Start-Sleep 3

@@ -20,6 +20,7 @@ public static class W {
   [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT p);
   [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr h, uint f);
   [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr h, int i);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindowEx(IntPtr p, IntPtr a, string c, string w);
   [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr a, int x, int y, int cx, int cy, uint f);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
   [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int a, out RECT r, int s);
@@ -95,6 +96,10 @@ if ($p) {
   else {
     $r = New-Object W+RECT; [W]::GetWindowRect($h, [ref]$r) | Out-Null
     $ex = [W]::GetWindowLong($h, -20)
+    $st = [W]::GetWindowLong($h, -16)
+    Write-Host ('STYLES: style 0x{0:X8} exstyle 0x{1:X8}' -f $st, $ex)
+    $child = [W]::FindWindowEx($h, [IntPtr]::Zero, $null, $null); $cr = New-Object W+RECT; [W]::GetWindowRect($child, [ref]$cr) | Out-Null
+    Write-Host ('RECTS: window {0},{1},{2},{3}  first child {4},{5},{6},{7}' -f $r.L, $r.T, $r.R, $r.B, $cr.L, $cr.T, $cr.R, $cr.B)
     if (($r.R - $r.L) -lt 100 -or ($r.B - $r.T) -lt 100) { Fail "panel too small: $($r.R - $r.L)x$($r.B - $r.T)" } else { Ok "panel $($r.R - $r.L)x$($r.B - $r.T)" }
     if (($ex -band 0x80) -eq 0) { Fail 'panel is not a tool window (would show in the taskbar)' } else { Ok 'tool window' }
     if (($ex -band 0x8) -ne 0) { Fail 'panel is always on top, but that is off by default' } else { Ok 'not on top by default' }

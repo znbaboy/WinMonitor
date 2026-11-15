@@ -63,12 +63,7 @@ namespace WinMonitor.UI
             AppWindow.IsShownInSwitchers = false;
             AppWindow.SetIcon(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "app.ico"));
 
-            // plain popup: no caption, frame or border lines
-            long st = Native.Style(Hwnd);
-            st &= ~(Native.WS_CAPTION | Native.WS_THICKFRAME | Native.WS_SYSMENU | Native.WS_MINIMIZEBOX | Native.WS_MAXIMIZEBOX | 0x00800000L /* WS_BORDER */);
-            Native.SetStyle(Hwnd, st | Native.WS_POPUP);
-            Native.SetWindowPos(Hwnd, IntPtr.Zero, 0, 0, 0, 0,
-                Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOZORDER | Native.SWP_NOACTIVATE | Native.SWP_FRAMECHANGED);
+            StripFrame();
 
             // tool window: no taskbar button
             long ex = Native.ExStyle(Hwnd);
@@ -94,6 +89,7 @@ namespace WinMonitor.UI
                     {
                         _widthPx = _heightPx = 0;
                         DpiChanged?.Invoke();
+                        StripFrame();
                         Native.SetCorners(Hwnd, 1);
                     });
                 }
@@ -177,10 +173,26 @@ namespace WinMonitor.UI
             }
         }
 
+        /// <summary>Plain popup: no caption, frame, border or 3D edge (WinUI may add them back when showing).</summary>
+        private void StripFrame()
+        {
+            long st = Native.Style(Hwnd);
+            long wantSt = (st & ~(Native.WS_CAPTION | Native.WS_THICKFRAME | Native.WS_SYSMENU | Native.WS_MINIMIZEBOX
+                                  | Native.WS_MAXIMIZEBOX | 0x00800000L /* WS_BORDER */ | 0x00400000L /* WS_DLGFRAME */)) | Native.WS_POPUP;
+            long ex = Native.ExStyle(Hwnd);
+            long wantEx = ex & ~(0x1L /* DLGMODALFRAME */ | 0x100L /* WINDOWEDGE */ | 0x200L /* CLIENTEDGE */ | 0x20000L /* STATICEDGE */);
+            if (st == wantSt && ex == wantEx) return;
+            Native.SetStyle(Hwnd, wantSt);
+            Native.SetExStyle(Hwnd, wantEx);
+            Native.SetWindowPos(Hwnd, IntPtr.Zero, 0, 0, 0, 0,
+                Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOZORDER | Native.SWP_NOACTIVATE | Native.SWP_FRAMECHANGED);
+        }
+
         public void ShowPanel(bool activate)
         {
             if (activate) Activate();
             else Native.ShowWindow(Hwnd, Native.SW_SHOWNOACTIVATE);
+            StripFrame();
             Native.SetCorners(Hwnd, 1);   // Windows can restore the frame when the window is first shown
             RefreshTopMost(true);
             KeepVisible(3);

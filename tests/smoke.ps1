@@ -7,7 +7,7 @@ New-Item -ItemType Directory -Force $Shots | Out-Null
 $Shots = (Resolve-Path $Shots).Path
 $env:WINMONITOR_NO_DIALOG = '1'   # no message boxes (driver / download prompts answer No)
 
-Add-Type -AssemblyName System.Drawing
+Add-Type -AssemblyName System.Drawing, System.Windows.Forms
 Add-Type @"
 using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
 public static class W {
@@ -46,6 +46,17 @@ public static class M {
   [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, UIntPtr e);
 }
 "@
+
+function Drag-Mouse([int]$x, [int]$y1, [int]$y2) {
+  # real mouse input (absolute moves), so Windows drag and drop sees it
+  $sw = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width; $sh = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height
+  function Abs([int]$px, [int]$py) { [M]::mouse_event(0x8001, [uint32]($px * 65535 / $sw), [uint32]($py * 65535 / $sh), 0, [UIntPtr]::Zero) }
+  Abs $x $y1; Start-Sleep -Milliseconds 300
+  [M]::mouse_event(0x2, 0, 0, 0, [UIntPtr]::Zero); Start-Sleep -Milliseconds 150
+  for ($yy = $y1; $yy -le $y2; $yy += 3) { Abs $x $yy; Start-Sleep -Milliseconds 20 }
+  Start-Sleep -Milliseconds 300
+  [M]::mouse_event(0x4, 0, 0, 0, [UIntPtr]::Zero); Start-Sleep 2
+}
 
 $script:failed = @()
 function Fail([string]$m) { Write-Host "FAIL: $m" -ForegroundColor Red; $script:failed += $m }
@@ -169,12 +180,7 @@ if ($p) {
     if (-not $a -or -not $b) { Fail 'drag test: handles not found' }
     else {
       $ra = $a.Current.BoundingRectangle; $rb = $b.Current.BoundingRectangle
-      $x = [int]($ra.X + $ra.Width / 2); $y1 = [int]($ra.Y + $ra.Height / 2); $y2 = [int]($rb.Y + $rb.Height)
-      [M]::SetCursorPos($x, $y1); Start-Sleep -Milliseconds 300
-      [M]::mouse_event(0x2, 0, 0, 0, [UIntPtr]::Zero); Start-Sleep -Milliseconds 200
-      for ($yy = $y1; $yy -le $y2 + 6; $yy += 4) { [M]::SetCursorPos($x, $yy); Start-Sleep -Milliseconds 15 }
-      Start-Sleep -Milliseconds 200
-      [M]::mouse_event(0x4, 0, 0, 0, [UIntPtr]::Zero); Start-Sleep 2
+      Drag-Mouse ([int]($ra.X + $ra.Width / 2)) ([int]($ra.Y + $ra.Height / 2)) ([int]($rb.Y + $rb.Height + 8))
       $json = Get-Content "$Dir\settings.json" -Raw | ConvertFrom-Json
       $host1 = ($json.MonitorItems | Where-Object Key -eq 'DASH.HOST').SortIndex
       $time1 = ($json.MonitorItems | Where-Object Key -eq 'DASH.Time').SortIndex
@@ -182,6 +188,20 @@ if ($p) {
       if (Test-Path "$Dir\WinMonitor_Trace.log") { Get-Content "$Dir\WinMonitor_Trace.log" | Select-Object -First 15 | ForEach-Object { Write-Host "TRACE $_" } } else { Write-Host 'TRACE: no trace written (press never reached the handle)' }
       if ($host1 -gt $time1) { Ok 'drag to reorder rows' } else { Fail 'drag to reorder rows did not change the order' }
       Shot $win 'settings-items-dragged' 0 $true
+      # collapse all, then drag the Dashboard category below Devices
+      $cc = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, 'Collapse all')
+      $btn = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cc)
+      if ($btn) { $btn.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke(); Start-Sleep 2 }
+      $ca = Find-Handle 'DASH'; $cb = Find-Handle 'HALO'
+      if ($ca -and $cb) {
+        $r1 = $ca.Current.BoundingRectangle; $r2 = $cb.Current.BoundingRectangle
+        Drag-Mouse ([int]($r1.X + $r1.Width / 2)) ([int]($r1.Y + $r1.Height / 2)) ([int]($r2.Y + $r2.Height + 12))
+        $json = Get-Content "$Dir\settings.json" -Raw | ConvertFrom-Json
+        $d = ($json.MonitorItems | Where-Object Key -eq 'DASH.Uptime').SortIndex; $h = ($json.MonitorItems | Where-Object Key -eq 'HALO.Mouse').SortIndex
+        Write-Host "DRAG CATEGORY: DASH.Uptime=$d HALO.Mouse=$h"
+        Shot $win 'settings-items-category-dragged' 0 $true
+        if ($d -gt $h) { Ok 'drag to reorder categories' } else { Fail 'drag to reorder categories did not change the order' }
+      } else { Fail 'category handles not found' }
     }
   } catch { Fail "drag test: $_" }
 }

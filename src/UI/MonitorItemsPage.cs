@@ -261,12 +261,17 @@ namespace WinMonitor.UI
     }
 
     /// <summary>
-    /// A vertical list whose children are reordered by dragging a handle: the row moves live
-    /// under the pointer, and <see cref="Reordered"/> fires once when it is dropped somewhere new.
+    /// A vertical list whose children are reordered by dragging a handle. Uses Windows drag and drop
+    /// (Windows tracks the mouse), moves the row live under the pointer, and raises
+    /// <see cref="Reordered"/> once when it is dropped somewhere new.
     /// </summary>
     internal sealed class ReorderPanel : StackPanel
     {
         public event Action? Reordered;
+
+        private static UIElement? _dragged;      // the row being dragged (one drag at a time)
+        private static ReorderPanel? _owner;     // the list it belongs to
+        private int _startIndex;
 
         // WINMONITOR_TRACE=1 writes drag steps to WinMonitor_Trace.log (automated tests)
         private static readonly bool Tracing = Environment.GetEnvironmentVariable("WINMONITOR_TRACE") == "1";
@@ -275,38 +280,52 @@ namespace WinMonitor.UI
             if (!Tracing) return;
             try { System.IO.File.AppendAllText(System.IO.Path.Combine(AppContext.BaseDirectory, "WinMonitor_Trace.log"), $"{DateTime.Now:HH:mm:ss.fff} {m}\r\n"); } catch { }
         }
-        private UIElement? _drag;
-        private int _startIndex;
 
         public ReorderPanel()
         {
-            PointerMoved += OnMoved;
-            PointerReleased += (_, _) => Drop();
-            PointerCaptureLost += (_, _) => Drop();
+            AllowDrop = true;
+            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);   // drop target everywhere
+            DragOver += OnDragOver;
+            Drop += (_, e) => { if (_owner == this) e.Handled = true; };
         }
 
         public void Add(UIElement row) => Children.Add(row);
 
-        /// <summary>Pressing the handle starts dragging the row (the panel holds the pointer, so the row can move).</summary>
         public void AttachHandle(UIElement handle, UIElement row)
         {
-            handle.PointerPressed += (_, e) =>
+            handle.CanDrag = true;
+            handle.PointerPressed += (_, e) => e.Handled = true;   // a press on the handle is not a click on the card header
+            handle.DragStarting += (_, e) =>
             {
-                if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
-                _drag = row;
+                _dragged = row;
+                _owner = this;
                 _startIndex = Children.IndexOf(row);
-                row.Opacity = 0.6;
-                bool captured = CapturePointer(e.Pointer);
-                Trace($"press index={_startIndex} captured={captured} children={Children.Count}");
-                e.Handled = true;   // not a click on the card header
+                row.Opacity = 0.5;
+                e.Data.SetText("WinMonitor.reorder");
+                e.Data.RequestedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move;
+                Trace($"start index={_startIndex}");
+            };
+            handle.DropCompleted += (_, _) =>
+            {
+                row.Opacity = 1;
+                bool moved = Children.IndexOf(row) != _startIndex;
+                Trace($"end index={Children.IndexOf(row)} start={_startIndex}");
+                _dragged = null;
+                _owner = null;
+                if (moved) Reordered?.Invoke();
             };
         }
 
-        private void OnMoved(object sender, PointerRoutedEventArgs e)
+        private void OnDragOver(object sender, DragEventArgs e)
         {
-            if (_drag == null) return;
-            double y = e.GetCurrentPoint(this).Position.Y;
-            int from = Children.IndexOf(_drag);
+            if (_owner != this || _dragged == null) return;   // not ours: let the outer list handle it
+            e.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move;
+            e.DragUIOverride.IsCaptionVisible = false;
+            e.DragUIOverride.IsGlyphVisible = false;
+            e.Handled = true;
+
+            double y = e.GetPosition(this).Y;
+            int from = Children.IndexOf(_dragged);
             int to = Children.Count - 1;
             for (int i = 0; i < Children.Count; i++)
             {
@@ -314,20 +333,11 @@ namespace WinMonitor.UI
                 double top = child.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, 0)).Y;
                 if (y < top + child.ActualHeight / 2) { to = i > from ? i - 1 : i; break; }
             }
-            Trace($"move y={y:0} from={from} to={to}");
-            if (to != from && to >= 0) Children.Move((uint)from, (uint)to);
-            e.Handled = true;
-        }
-
-        private void Drop()
-        {
-            if (_drag == null) return;
-            var row = _drag;
-            _drag = null;
-            row.Opacity = 1;
-            Trace($"drop index={Children.IndexOf(row)} start={_startIndex}");
-            ReleasePointerCaptures();
-            if (Children.IndexOf(row) != _startIndex) Reordered?.Invoke();
+            if (to != from && to >= 0)
+            {
+                Trace($"move y={y:0} from={from} to={to}");
+                Children.Move((uint)from, (uint)to);
+            }
         }
     }
 }

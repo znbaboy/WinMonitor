@@ -250,7 +250,10 @@ $env:WINMONITOR_NO_DIALOG = $null
 $p = Start-App $null @('--open', 'settings:About')
 if ($p) {
   try {
-    $win = [W]::Find([uint32]$p.Id, 'Settings - WinMonitor', $false) | Select-Object -First 1
+    $win = $null
+    for ($i = 0; $i -lt 20 -and -not $win; $i++) { $win = [W]::Find([uint32]$p.Id, 'Settings - WinMonitor', $false) | Select-Object -First 1; if (-not $win) { Start-Sleep -Milliseconds 500 } }
+    if (-not $win) { throw 'settings window not found' }
+    $win = [IntPtr]$win
     [W]::SetWindowPos($win, [IntPtr]::Zero, 60, 30, 900, 700, 0x40) | Out-Null
     Start-Sleep 2
     $root = [System.Windows.Automation.AutomationElement]::FromHandle($win)

@@ -19,6 +19,7 @@ Free and open source (MIT). Portable: unzip and run.
 <p>
 <img src="docs/screenshots/monitor-items.png" width="49%" alt="Monitor Items">
 <img src="docs/screenshots/settings.png" width="49%" alt="Settings">
+<img alt="image" src="https://github.com/user-attachments/assets/7740cd78-1393-4518-aa3a-feb259198d71" width="10%" />
 </p>
 
 ## Install

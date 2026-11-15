@@ -81,6 +81,20 @@ namespace WinMonitor.UI
 
             Hook.Add((msg, w, l) =>
             {
+                // No frame, ever: WinUI re-adds a dialog frame / window edge after we remove them (the light outline).
+                if (msg == 0x007C /* WM_STYLECHANGING */)
+                {
+                    int which = (int)(long)w;
+                    uint styleNew = (uint)System.Runtime.InteropServices.Marshal.ReadInt32(l, 4);
+                    uint fixedStyle = which == Native.GWL_STYLE
+                        ? (styleNew & ~(0x00C00000u /* CAPTION = BORDER|DLGFRAME */ | 0x00040000u /* THICKFRAME */)) | 0x80000000u /* POPUP */
+                        : which == Native.GWL_EXSTYLE ? styleNew & ~(0x1u | 0x100u | 0x200u | 0x20000u) : styleNew;
+                    if (fixedStyle != styleNew) System.Runtime.InteropServices.Marshal.WriteInt32(l, 4, (int)fixedStyle);
+                    return null;
+                }
+                if (msg == 0x0083 /* WM_NCCALCSIZE */ && w != IntPtr.Zero) return IntPtr.Zero;   // client area = whole window
+                if (msg == 0x0085 /* WM_NCPAINT */) return IntPtr.Zero;                         // nothing to paint outside it
+                if (msg == 0x0086 /* WM_NCACTIVATE */) return (IntPtr)1;                        // no frame redraw on focus change
                 if (msg == Native.WM_DISPLAYCHANGE) { _displayTimer!.Stop(); _displayTimer.Start(); }   // restore position after the screens settle
                 if (msg == Native.WM_DPICHANGED)
                 {

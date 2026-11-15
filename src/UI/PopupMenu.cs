@@ -21,7 +21,7 @@ namespace WinMonitor.UI
         public static MenuEntry Sub(string text, List<MenuEntry> items) => new() { Text = text, Items = items };
     }
 
-    /// <summary>Shows a menu as a native Windows popup menu (dark, like the panel).</summary>
+    /// <summary>Shows a menu as a native Windows popup menu (light or dark, like the panel).</summary>
     internal static class PopupMenu
     {
         public static bool IsOpen { get; private set; }
@@ -71,12 +71,12 @@ namespace WinMonitor.UI
             return menu;
         }
 
-        /// <summary>Dark popup menus for the whole app (uxtheme, undocumented but stable since Windows 10 1903).</summary>
-        public static void UseDarkMenus()
+        /// <summary>Light or dark popup menus for the whole app (uxtheme, undocumented but stable since Windows 10 1903).</summary>
+        public static void UseDarkMenus(bool dark)
         {
             try
             {
-                SetPreferredAppMode(2 /* ForceDark */);
+                SetPreferredAppMode(dark ? 2 /* ForceDark */ : 3 /* ForceLight */);
                 FlushMenuThemes();
             }
             catch { }

@@ -16,7 +16,7 @@ using Color = Windows.UI.Color;
 
 namespace WinMonitor.UI
 {
-    /// <summary>Monitor history: temperature, load, power, clock and FPS over 1 h / 24 h / 7 days (kept for 7 days).</summary>
+    /// <summary>Monitor history: temperature, load, power and clock over 1 h / 24 h / 7 days (kept for 7 days).</summary>
     internal sealed class TrendWindow : ToolWindow
     {
         private sealed class Point { public DateTime Time; public float Avg, Max, Min; public int Count; }
@@ -28,7 +28,6 @@ namespace WinMonitor.UI
             ("Load", HardwareHistoryLogger.LoadKeys),
             ("Power", HardwareHistoryLogger.PowerKeys),
             ("Clock", HardwareHistoryLogger.FrequencyKeys),
-            ("FPS", HardwareHistoryLogger.FpsKeys),
         };
         private static readonly (string Name, TimeSpan Span, int Bucket)[] Ranges =
         {
@@ -117,7 +116,6 @@ namespace WinMonitor.UI
             MetricType.Percent or MetricType.Memory => "%",
             MetricType.Frequency => "GHz",
             MetricType.Power => "W",
-            MetricType.FPS => "FPS",
             _ => "",
         };
 
@@ -127,7 +125,7 @@ namespace WinMonitor.UI
         {
             string text = unit == "GHz" ? v.ToString("0.0", CultureInfo.InvariantCulture)
                         : v >= 100 ? v.ToString("0", CultureInfo.InvariantCulture) : v.ToString("0.#", CultureInfo.InvariantCulture);
-            return unit == "FPS" ? text + " FPS" : text + unit;
+            return text + unit;
         }
 
         private void LoadData()

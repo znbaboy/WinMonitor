@@ -26,7 +26,6 @@ namespace WinMonitor.Services
         private readonly SensorMap _sensorMap;
         private readonly NetworkManager _networkManager;
         private readonly DiskManager _diskManager;
-        private readonly FpsCounter _fpsCounter;
         private readonly DriverInstaller _driverInstaller;
         private readonly HardwareValueProvider _valueProvider;
 
@@ -94,7 +93,6 @@ namespace WinMonitor.Services
             _networkManager = new NetworkManager(_perfCounterManager);
             _diskManager = new DiskManager();
             _driverInstaller = new DriverInstaller(cfg, ReloadComputerSafe, ReleaseComputerForDriverInstall);
-            _fpsCounter = new FpsCounter(_driverInstaller); // <--- 新增
 
             // ★★★ [修改] 2. 将 Manager 注入给 ValueProvider ★★★
             _valueProvider = new HardwareValueProvider(
@@ -103,7 +101,6 @@ namespace WinMonitor.Services
                 _sensorMap, 
                 _networkManager, 
                 _diskManager, 
-                _fpsCounter, 
                 _perfCounterManager, 
                 _lock, 
                 _lastValidMap
@@ -280,7 +277,6 @@ namespace WinMonitor.Services
             }
         }
 
-        public void CleanMemory(Action<int>? onProgress = null) => SystemOptimizer.CleanMemory(onProgress);
 
         public void Dispose()
         {
@@ -301,7 +297,6 @@ namespace WinMonitor.Services
 
             _valueProvider.Dispose();
             _perfCounterManager.Dispose(); // ★★★ [新增] 释放计数器资源 ★★★
-            _fpsCounter.Dispose(); // <--- 新增
             _networkManager.ClearCache();
             _diskManager.ClearCache(); // 漏掉的，补上
         }

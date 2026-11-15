@@ -49,7 +49,8 @@ namespace WinMonitor
             // s.SyncToLanguage();
             
             // [Cleanup] actions 3 (traffic history) and 5 (web display) no longer exist
-            if (s.MainFormDoubleClickAction == 3 || s.MainFormDoubleClickAction > 4) s.MainFormDoubleClickAction = 0;
+            if (s.MainFormDoubleClickAction is not (1 or 2 or 5)) s.MainFormDoubleClickAction = 2;   // removed actions open Settings
+            if (s.Skin is not ("System" or "Light" or "Dark")) s.Skin = "System";               // old theme files are gone
 
             s.InternAllStrings();
             
@@ -169,9 +170,8 @@ namespace WinMonitor
                 new MonitorItemConfig { Key = "GPU.Fan",   SortIndex = 305, VisibleInPanel = false },
                 new MonitorItemConfig { Key = "GPU.VRAM",  SortIndex = 306, VisibleInPanel = true },
 
-                // [4xx] HOST (MEM, FPS, MOBO, DISK Temp, CASE Fan)
+                // [4xx] HOST (MEM, MOBO, DISK Temp, CASE Fan)
                 new MonitorItemConfig { Key = "MEM.Load",  SortIndex = 401, VisibleInPanel = true },
-                new MonitorItemConfig { Key = "FPS",       SortIndex = 402, VisibleInPanel = false },
                 new MonitorItemConfig { Key = "MOBO.Temp", SortIndex = 403, VisibleInPanel = false },
                 new MonitorItemConfig { Key = "DISK.Temp", SortIndex = 404, VisibleInPanel = false },
                 new MonitorItemConfig { Key = "CASE.Fan",  SortIndex = 405, VisibleInPanel = false },

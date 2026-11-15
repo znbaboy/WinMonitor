@@ -53,10 +53,6 @@ namespace WinMonitor
                 Report(ex);
                 return 1;
             }
-            finally
-            {
-                try { FpsCounter.ForceKillZombies(); } catch { }
-            }
         }
 
         private static readonly string LogPath = Path.Combine(AppContext.BaseDirectory, "WinMonitor_Error.log");

@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Windows.Graphics;
+using WinMonitor.Core;
 
 namespace WinMonitor.UI
 {
@@ -46,6 +47,13 @@ namespace WinMonitor.UI
             Content = Shell;
 
             Shell.ActualThemeChanged += (_, _) => UpdateCaptionButtons();
+            var app = AppHost.Current;
+            if (app != null)
+            {
+                SetTheme(ThemeManager.IsDark(app.Cfg.Skin));
+                app.ThemeChanged += SetTheme;
+                Closed += (_, _) => app.ThemeChanged -= SetTheme;
+            }
             UpdateCaptionButtons();
 
             double s = Native.Scale(Hwnd);
@@ -60,6 +68,8 @@ namespace WinMonitor.UI
             Grid.SetRow((FrameworkElement)body, 1);
             Shell.Children.Add(body);
         }
+
+        private void SetTheme(bool dark) => Shell.RequestedTheme = dark ? ElementTheme.Dark : ElementTheme.Light;
 
         private void UpdateCaptionButtons()
         {

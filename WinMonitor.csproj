@@ -39,7 +39,6 @@
 
   <ItemGroup>
     <Content Include="Assets\**" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="resources\themes\*.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="resources\lang\*.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="LICENSE;THIRD-PARTY-NOTICES.txt" CopyToOutputDirectory="PreserveNewest" />
     <Compile Remove="tests\**" />

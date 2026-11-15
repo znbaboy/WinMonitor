@@ -28,7 +28,7 @@ namespace WinMonitor.UI
             Current = this;
             Cfg = cfg;
 
-            PopupMenu.UseDarkMenus();
+            PopupMenu.UseDarkMenus(ThemeManager.IsDark(cfg.Skin));
             TrafficLogger.Load();
             HardwareHistoryLogger.Load();
 
@@ -44,6 +44,9 @@ namespace WinMonitor.UI
             Panel.Hook.Add((msg, w, l) =>
             {
                 if (msg == WM_SHOWAPP) { ShowPanel(); return IntPtr.Zero; }
+                if (msg == Native.WM_SETTINGCHANGE && Cfg.Skin == "System" && l != IntPtr.Zero
+                    && System.Runtime.InteropServices.Marshal.PtrToStringUni(l) == "ImmersiveColorSet")
+                    Panel.DispatcherQueue.TryEnqueue(ApplyAppTheme);   // Windows switched light / dark
                 return null;
             });
             Panel.MenuRequested += ShowMenu;
@@ -59,7 +62,7 @@ namespace WinMonitor.UI
             Panel.ApplyAttributes();
             if (cfg.HideMainForm) Panel.HidePanel();
 
-            // --open settings[:Page] | history | hardware | themes  (shortcuts; also used by the automated tests)
+            // --open settings[:Page] | history | hardware  (shortcuts; also used by the automated tests)
             var args = Environment.GetCommandLineArgs();
             int oi = Array.IndexOf(args, "--open");
             if (oi >= 0 && oi + 1 < args.Length)
@@ -79,7 +82,6 @@ namespace WinMonitor.UI
                 case "settings": OpenSettings(parts.Length > 1 ? parts[1] : null); break;
                 case "history": OpenTrend(); break;
                 case "hardware": OpenHardwareInfo(); break;
-                case "themes": OpenThemeEditor(); break;
             }
         }
 
@@ -123,20 +125,29 @@ namespace WinMonitor.UI
             else if (!Panel.IsVisible) Panel.ShowPanel(activate: false);
         }
 
-        public void ApplyThemeAndLayout(bool? wasHorizontal = null, bool retainData = false)
+        public void ApplyThemeAndLayout(bool retainData = false)
         {
-            bool modeChanged = (wasHorizontal ?? Cfg.HorizontalMode) != Cfg.HorizontalMode;
-            var center = modeChanged && Panel.IsVisible ? Panel.Center : ((int, int)?)null;
-            Controller.ApplyTheme(retainData && !modeChanged);
-            if (center.HasValue) Panel.CenterOn(center.Value);
+            Controller.ApplyTheme(retainData);
             Panel.ClampToScreen(false);
         }
+
+        /// <summary>Light or dark everywhere: panel, menus and windows.</summary>
+        public void ApplyAppTheme()
+        {
+            bool dark = ThemeManager.IsDark(Cfg.Skin);
+            PopupMenu.UseDarkMenus(dark);
+            ThemeChanged?.Invoke(dark);
+            ApplyThemeAndLayout(retainData: true);
+        }
+
+        /// <summary>Raised with "dark?" when the look changes; open windows follow it.</summary>
+        public event Action<bool>? ThemeChanged;
 
         public void ApplyMonitorLayout()
         {
             Controller.Monitor.RefreshHardwareConfig();
             Controller.RebuildLayout();
-            _ = Controller.Monitor.SmartCheckDriver();   // e.g. FPS switched on: offer PresentMon
+            _ = Controller.Monitor.SmartCheckDriver();   // e.g. CPU items switched on: offer the PawnIO driver
         }
 
         public void ApplyAutoStart() => AutoStart.Set(Cfg.AutoStart);
@@ -149,22 +160,13 @@ namespace WinMonitor.UI
             ApplyVisibility();
         }
 
-        private void ToggleLayout()
-        {
-            bool old = Cfg.HorizontalMode;
-            Cfg.HorizontalMode = !old;
-            Cfg.Save();
-            ApplyThemeAndLayout(old);
-        }
-
         private void HandleDoubleClick()
         {
             switch (Cfg.MainFormDoubleClickAction)
             {
                 case 1: SystemActions.OpenTaskManager(); break;
-                case 2: OpenSettings(); break;
-                case 4: CleanMemory(); break;
-                default: ToggleLayout(); break;
+                case 5: break;
+                default: OpenSettings(); break;
             }
         }
 
@@ -172,7 +174,6 @@ namespace WinMonitor.UI
         private SettingsWindow? _settings;
         private TrendWindow? _trend;
         private HardwareInfoWindow? _info;
-        private ThemeEditorWindow? _themeEditor;
 
         public void OpenSettings(string? page = null)
         {
@@ -197,35 +198,22 @@ namespace WinMonitor.UI
             _info.Activate();
         }
 
-        public void OpenThemeEditor()
-        {
-            if (_themeEditor == null) { _themeEditor = new ThemeEditorWindow(this); _themeEditor.Closed += (_, _) => _themeEditor = null; }
-            _themeEditor.Activate();
-        }
-
-        public void CleanMemory() => CleanMemoryWindow.Run(Panel);
-
         // ------------------------------------------------------------------ menu
         // after the click or tray message has been handled, so the menu's own loop does not run inside it
         private void ShowMenu() => Panel.DispatcherQueue.TryEnqueue(() => PopupMenu.Show(Panel.Hwnd, BuildMenu()));
 
         private static string T(string key) => LanguageManager.T(key);
 
+        public static readonly (string Key, string Label)[] ThemeModes = { ("System", "Use Windows setting"), ("Light", "Light"), ("Dark", "Dark") };
+
         private List<MenuEntry> BuildMenu()
         {
             var c = Cfg;
-            var m = new List<MenuEntry>
-            {
-                MenuEntry.Item(T("Menu.CleanMemory"), CleanMemory),
-                MenuEntry.Separator,
-            };
+            var m = new List<MenuEntry>();
 
-            // display mode & window behaviour
+            // window behaviour and look
             var mode = new List<MenuEntry>
             {
-                MenuEntry.Item(T("Menu.Vertical"), () => SetMode(false), !c.HorizontalMode),
-                MenuEntry.Item(T("Menu.Horizontal"), () => SetMode(true), c.HorizontalMode),
-                MenuEntry.Separator,
                 Toggle(T("Menu.TopMost"), c.TopMost, v => c.TopMost = v, ApplyWindowAttributes),
                 Toggle(T("Menu.AutoHide"), c.AutoHide, v => c.AutoHide = v, ApplyWindowAttributes),
                 Toggle(T("Menu.ClampToScreen"), c.ClampToScreen, v => c.ClampToScreen = v, null),
@@ -241,14 +229,10 @@ namespace WinMonitor.UI
                 Toggle(T("Menu.HideMainForm"), c.HideMainForm, v => c.HideMainForm = v, ApplyVisibility),
                 Toggle(T("Menu.HideTrayIcon"), c.HideTrayIcon, v => c.HideTrayIcon = v, ApplyVisibility),
             };
-            m.Add(MenuEntry.Sub(T("Menu.DisplayMode"), mode));
             m.Add(MenuEntry.Sub(T("Menu.MonitorItemDisplay"), BuildItemsMenu()));
-
-            // themes
-            var themes = new List<MenuEntry> { MenuEntry.Item(T("Menu.ThemeEditor"), OpenThemeEditor), MenuEntry.Separator };
-            foreach (var name in ThemeManager.GetAvailableThemes())
-                themes.Add(MenuEntry.Item(name, () => { c.Skin = name; c.Save(); ApplyThemeAndLayout(); }, name.Equals(c.Skin, StringComparison.OrdinalIgnoreCase)));
-            m.Add(MenuEntry.Sub(T("Menu.Theme"), themes));
+            m.Add(MenuEntry.Sub(T("Menu.MainFormSettings"), mode));
+            m.Add(MenuEntry.Sub(T("Menu.Theme"), ThemeModes.Select(t =>
+                MenuEntry.Item(t.Label, () => { c.Skin = t.Key; c.Save(); ApplyAppTheme(); }, c.Skin == t.Key)).ToList()));
             m.Add(MenuEntry.Separator);
 
             m.Add(MenuEntry.Item(T("Menu.HardwareInfo"), OpenHardwareInfo));
@@ -259,32 +243,7 @@ namespace WinMonitor.UI
             m.Add(MenuEntry.Separator);
             m.Add(Toggle(T("Menu.AutoStart"), c.AutoStart, v => c.AutoStart = v, ApplyAutoStart));
 
-            // more
-            var shutdown = new List<MenuEntry>();
-            foreach (var min in new[] { 5, 10, 15, 30, 45 })
-                shutdown.Add(MenuEntry.Item($"{min} {T("Menu.MinutesLater")}", () => SystemActions.ScheduleShutdown(min * 60)));
-            foreach (var h in new[] { 1, 2, 3, 4, 5, 6, 8, 10, 12, 24 })
-                shutdown.Add(MenuEntry.Item($"{h} {T("Menu.HoursLater")}", () => SystemActions.ScheduleShutdown(h * 3600)));
-            shutdown.Add(MenuEntry.Separator);
-            shutdown.Add(MenuEntry.Item(T("Menu.CancelShutdown"), () => SystemActions.ScheduleShutdown(0)));
-
-            m.Add(MenuEntry.Sub(T("Menu.More"), new List<MenuEntry>
-            {
-                MenuEntry.Item(T("Menu.ActionTaskMgr"), SystemActions.OpenTaskManager),
-                MenuEntry.Item(T("Menu.RestartExplorer"), SystemActions.RestartExplorer),
-                MenuEntry.Separator,
-                MenuEntry.Item(T("Menu.RefreshIcons"), SystemActions.RefreshIconCache),
-                MenuEntry.Item(T("Menu.CleanTemp"), () => _ = SystemActions.CleanTempFilesAsync()),
-                MenuEntry.Separator,
-                MenuEntry.Item(T("Menu.PreventSleep"), SystemActions.TogglePreventSleep, SystemActions.IsPreventSleep),
-                MenuEntry.Item(T("Menu.TurnOffMonitor"), () => SystemActions.TurnOffMonitor(Panel.Hwnd)),
-                MenuEntry.Sub(T("Menu.ScheduledShutdown"), shutdown),
-                MenuEntry.Separator,
-                MenuEntry.Item(T("Menu.Feedback"), () => SystemActions.OpenUrl(AppInfo.IssuesUrl)),
-                MenuEntry.Item(T("Menu.About"), () => OpenSettings("About")),
-                MenuEntry.Separator,
-                MenuEntry.Item(T("Menu.RestartApp"), Restart),
-            }));
+            m.Add(MenuEntry.Item(T("Menu.About"), () => OpenSettings("About")));
             m.Add(MenuEntry.Separator);
             m.Add(MenuEntry.Item(T("Menu.Exit"), Exit));
             return m;
@@ -292,14 +251,6 @@ namespace WinMonitor.UI
 
         private MenuEntry Toggle(string text, bool value, Action<bool> set, Action? apply) =>
             MenuEntry.Item(text, () => { set(!value); Cfg.Save(); apply?.Invoke(); }, value);
-
-        private void SetMode(bool horizontal)
-        {
-            bool old = Cfg.HorizontalMode;
-            Cfg.HorizontalMode = horizontal;
-            Cfg.Save();
-            ApplyThemeAndLayout(old);
-        }
 
         /// <summary>The "Monitor Items" submenu: one entry per item; network, disk and traffic switch as a group.</summary>
         private List<MenuEntry> BuildItemsMenu()
@@ -370,7 +321,6 @@ namespace WinMonitor.UI
         {
             SaveAll();
             try { _tray.Dispose(); } catch { }
-            try { FpsCounter.ForceKillZombies(); } catch { }
             SystemActions.RestartApplication();
         }
 
@@ -393,7 +343,6 @@ namespace WinMonitor.UI
             SaveAll();
             try { _tray.Dispose(); } catch { }
             try { Controller.Dispose(); } catch { }
-            try { FpsCounter.ForceKillZombies(); } catch { }
             Application.Current.Exit();
         }
     }

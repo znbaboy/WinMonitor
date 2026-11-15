@@ -8,7 +8,7 @@ namespace WinMonitor
     public class Settings
     {
         // ====== 基础设置 ======
-        public string Skin { get; set; } = "DarkFlat_Classic";
+        public string Skin { get; set; } = "System";   // System (follow Windows), Light or Dark
         public bool TopMost { get; set; } = true;
         public bool AutoStart { get; set; } = false;
         public int RefreshMs { get; set; } = 1000;
@@ -16,7 +16,6 @@ namespace WinMonitor
         public ScreenPoint Position { get; set; } = new ScreenPoint(-1, -1);
 
         // ====== 界面与行为 ======
-        public bool HorizontalMode { get; set; } = false;
         public double Opacity { get; set; } = 0.85;
         public bool ClickThrough { get; set; } = false;
         public bool AutoHide { get; set; } = true;
@@ -45,12 +44,9 @@ namespace WinMonitor
         public bool HideTrayIcon { get; set; } = false;
 
         // ★★★ [新增] 横条/桌面模式 间距配置 ★★★
-        public int HorizontalItemSpacing { get; set; } = 12;  // 组间距 (默认 12)
-        public int HorizontalInnerSpacing { get; set; } = 8;  // 标签与值间距 (默认 8)
-        public bool HorizontalSingleLine { get; set; } = false; // [新增] 横条模式单行显示
 
         // 双击动作配置
-        public int MainFormDoubleClickAction { get; set; } = 0;
+        public int MainFormDoubleClickAction { get; set; } = 2;   // 1 Task Manager, 2 Settings, 5 nothing
 
         // 内存/显存显示模式
         public int MemoryDisplayMode { get; set; } = 1;
@@ -71,8 +67,6 @@ namespace WinMonitor
         public float RecordedMaxGpuPower { get; set; } = 100.0f;
         public float RecordedMaxGpuClock { get; set; } = 1800.0f;
         
-        // ★★★ [新增] FPS 固定最大值 (用于进度条上限，推荐 144) ★★★
-        public float RecordedMaxFps { get; set; } = 144.0f;
 
         // ★★★ [新增] 风扇最大值记录 ★★★
         public float RecordedMaxCpuFan { get; set; } = 4000;

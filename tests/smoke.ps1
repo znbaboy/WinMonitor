@@ -108,13 +108,11 @@ if ($p) {
   if ($p.HasExited) { Fail 'first instance died after the second launch' }
 }
 
-# ---------------------------------------------------------------- 2. bar (horizontal) layout
-$p = Start-App '{ "HorizontalMode": true, "AutoHide": false }'
-if ($p) { $h = Panel $p; if ($h) { Shot $h 'panel-bar' 24; Ok 'bar layout' } else { Fail 'bar layout: no panel' } }
-
-# ---------------------------------------------------------------- 3. light theme, 60% opacity, wider
-$p = Start-App '{ "Skin": "LightPure_Elegant", "Opacity": 0.6, "PanelWidth": 300, "AutoHide": false, "UIScale": 0.85 }'
-if ($p) { $h = Panel $p; if ($h) { Shot $h 'panel-light-60' 24; Ok 'light theme' } else { Fail 'light theme: no panel' } }
+# ---------------------------------------------------------------- 2. light and dark looks
+$p = Start-App '{ "Skin": "Light", "AutoHide": false, "UIScale": 0.85 }'
+if ($p) { $h = Panel $p; if ($h) { Shot $h 'panel-light' 24; Ok 'light look' } else { Fail 'light look: no panel' } }
+$p = Start-App '{ "Skin": "Dark", "Opacity": 0.6, "PanelWidth": 300, "AutoHide": false, "UIScale": 0.85 }'
+if ($p) { $h = Panel $p; if ($h) { Shot $h 'panel-dark-60' 24; Ok 'dark look, 60% opacity' } else { Fail 'dark look: no panel' } }
 
 # ---------------------------------------------------------------- 4. click-through
 $p = Start-App '{ "ClickThrough": true, "AutoHide": false, "UIScale": 0.9 }'
@@ -143,32 +141,12 @@ $p = Start-App $null @('--open', 'history')
 if ($p) { Window $p 'Monitor History' 'history' }
 $p = Start-App $null @('--open', 'hardware')
 if ($p) { Window $p 'Hardware Info' 'hardware-info' }
-$p = Start-App $null @('--open', 'themes')
-if ($p) { Window $p 'Theme Editor' 'theme-editor' }
-# keep this instance drawing for the PresentMon check below
+Stop-App
 
 # ---------------------------------------------------------------- 6. errors
 $log = Join-Path $Dir 'WinMonitor_Error.log'
 if (Test-Path $log) { Get-Content $log | Select-Object -First 80; Fail 'WinMonitor_Error.log was written' } else { Ok 'no error log' }
 Remove-Item "$Dir\settings.json*", "$Dir\*.json.bak", "$Dir\TrafficHistory.json", "$Dir\HardwareHistory.json", $log -ErrorAction SilentlyContinue
-
-# ---------------------------------------------------------------- 7. official PresentMon works with WinMonitor's arguments
-try {
-  $pm = Join-Path $env:RUNNER_TEMP 'PresentMon.exe'
-  Invoke-WebRequest 'https://github.com/GameTechDev/PresentMon/releases/download/v2.6.0/PresentMon-2.6.0-x64.exe' -OutFile $pm
-  $hash = (Get-FileHash $pm -Algorithm SHA256).Hash
-  if ($hash -ne 'B2A706BC6AD475749E3B7E3409263AA1E6906D45BDCF993F6DBC0F660188F1AF') { Fail "PresentMon hash changed: $hash" }
-  $out = Join-Path $env:RUNNER_TEMP 'pm.txt'
-  $pp = Start-Process $pm -ArgumentList '--session_name WinMonitor_CI --stop_existing_session --output_stdout' -RedirectStandardOutput $out -RedirectStandardError "$out.err" -PassThru -WindowStyle Hidden
-  Start-Sleep 10
-  if (-not $pp.HasExited) { Stop-Process $pp -Force }
-  $lines = @(Get-Content $out -TotalCount 3)
-  Write-Host "PresentMon output ($((Get-Content $out).Count) lines):"; $lines | ForEach-Object { Write-Host "  $_" }
-  Write-Host "PresentMon errors:"; Get-Content "$out.err" -TotalCount 20 | ForEach-Object { Write-Host "  $_" }
-  if ($lines.Count -eq 0 -or "$($lines[0])" -notmatch '^Application,ProcessID') { Fail 'PresentMon output is not the expected CSV' } else { Ok 'PresentMon CSV' }
-  logman stop WinMonitor_CI -ets 2>$null | Out-Null
-} catch { Fail "PresentMon test: $_" }
-Stop-App
 
 if ($script:failed.Count -gt 0) { Write-Host "`n$($script:failed.Count) check(s) failed:"; $script:failed | ForEach-Object { Write-Host " - $_" }; exit 1 }
 Write-Host "`nAll checks passed."

@@ -1,6 +1,5 @@
-// Optional components, always downloaded from their official releases and checked against a pinned SHA-256:
-// - PawnIO driver (CPU temperature / clock / power): https://github.com/namazso/PawnIO.Setup
-// - PresentMon (FPS):                                 https://github.com/GameTechDev/PresentMon (MIT)
+// Optional PawnIO driver (CPU temperature / clock / power): https://github.com/namazso/PawnIO.Setup
+// Downloaded only from its official release and checked against a pinned SHA-256.
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -20,15 +19,10 @@ namespace WinMonitor.Services
 
         private const string PawnIOUrl = "https://github.com/namazso/PawnIO.Setup/releases/download/2.2.0/PawnIO_setup.exe";
         private const string PawnIOSha256 = "1f519a22e47187f70a1379a48ca604981c4fcf694f4e65b734aaa74a9fba3032";
-        private const string PresentMonUrl = "https://github.com/GameTechDev/PresentMon/releases/download/v2.6.0/PresentMon-2.6.0-x64.exe";
-        private const string PresentMonSha256 = "b2a706bc6ad475749e3b7e3409263aa1e6906d45bdcf993f6dbc0f660188f1af";
 
         private const int ErrorAlreadyExists = 183;
         private const int ErrorSuccessRebootRequired = 3010;
         private const int ErrorServiceMarkedForDelete = 1072;
-
-        /// <summary>Where PresentMon is kept (next to the app, so the app stays portable).</summary>
-        public static string PresentMonPath => Path.Combine(AppContext.BaseDirectory, "resources", "PresentMon.exe");
 
         private readonly Settings _cfg;
         private readonly Action? _onReloadRequired;        // reload the sensors after a driver install
@@ -37,7 +31,6 @@ namespace WinMonitor.Services
         private static readonly SemaphoreSlim Lock = new(1, 1);
         private static bool _startupSawPendingDriver;
         private static bool _restartRequired;
-        private static bool _presentMonAsked;
 
         public DriverInstaller(Settings cfg, Action? onReloadRequired, Action? onPrepareDriverInstall)
         {
@@ -75,48 +68,8 @@ namespace WinMonitor.Services
                     _startupSawPendingDriver = true;
                     await InstallPawnIO(info, startup: false).ConfigureAwait(false);
                 }
-                if (_cfg.IsAnyEnabled("FPS") && !IsValidFile(PresentMonPath, PresentMonSha256))
-                    await DownloadPresentMon(ask: true).ConfigureAwait(false);
             }
             finally { Lock.Release(); }
-        }
-
-        /// <summary>Makes sure PresentMon is there (the FPS counter calls this from its own thread).</summary>
-        public async Task<bool> CheckAndDownloadPresentMon(bool silent = false)
-        {
-            if (IsValidFile(PresentMonPath, PresentMonSha256)) return true;
-            await Lock.WaitAsync().ConfigureAwait(false);
-            try { return await DownloadPresentMon(ask: true).ConfigureAwait(false); }
-            finally { Lock.Release(); }
-        }
-
-        // =====================================================================
-        // PresentMon
-        // =====================================================================
-        private async Task<bool> DownloadPresentMon(bool ask)
-        {
-            if (IsValidFile(PresentMonPath, PresentMonSha256)) return true;
-            if (ask)
-            {
-                if (_presentMonAsked) return false;   // asked once per session
-                _presentMonAsked = true;
-                if (!Dialogs.YesNo("FPS needs PresentMon (Intel, MIT licence, about 1 MB).\n\n" +
-                                   "Download it now from github.com/GameTechDev/PresentMon?", "WinMonitor: FPS"))
-                    return false;
-            }
-            try
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(PresentMonPath)!);
-                string tmp = PresentMonPath + ".download";
-                await DownloadVerified(PresentMonUrl, PresentMonSha256, tmp).ConfigureAwait(false);
-                File.Move(tmp, PresentMonPath, true);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Dialogs.Error("PresentMon download failed:\n" + ex.Message, "WinMonitor: FPS");
-                return false;
-            }
         }
 
         // =====================================================================
@@ -307,17 +260,6 @@ namespace WinMonitor.Services
             if (!hash.Equals(sha256, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("The downloaded file does not match the expected checksum, so it was not used.");
             await File.WriteAllBytesAsync(dest, bytes).ConfigureAwait(false);
-        }
-
-        private static bool IsValidFile(string path, string sha256)
-        {
-            try
-            {
-                if (!File.Exists(path)) return false;
-                using var fs = File.OpenRead(path);
-                return Convert.ToHexString(SHA256.HashData(fs)).Equals(sha256, StringComparison.OrdinalIgnoreCase);
-            }
-            catch { return false; }
         }
     }
 }

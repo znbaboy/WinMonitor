@@ -38,7 +38,7 @@ jobs:
         run: |
           $d = 'publish/WinMonitor'
           foreach ($f in 'WinMonitor.exe', 'WinMonitor.pri', 'Microsoft.WindowsAppRuntime.dll', 'LibreHardwareMonitorLib.dll',
-                         'resources/themes/DarkFlat_Classic.json', 'resources/lang/en.json', 'Assets/app.ico', 'LICENSE', 'THIRD-PARTY-NOTICES.txt') {
+                         'resources/lang/en.json', 'Assets/app.ico', 'LICENSE', 'THIRD-PARTY-NOTICES.txt') {
             if (-not (Test-Path "$d/$f")) { throw "$f missing from the publish output" }
           }
           "{0:N1} MB" -f ((Get-ChildItem $d -Recurse | Measure-Object Length -Sum).Sum / 1MB)

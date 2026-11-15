@@ -3,7 +3,7 @@ WinMonitor itself is released under the MIT License (see LICENSE).
 
 ================================================================================
 LiteMonitor  https://github.com/Diorser/LiteMonitor
-WinMonitor's sensor code, metric formatting, themes and panel layout are ported from LiteMonitor.
+WinMonitor's sensor code, metric formatting and panel layout are ported from LiteMonitor.
 Released under the MIT License (as stated in the LiteMonitor README).
 --------------------------------------------------------------------------------
 MIT License
@@ -96,8 +96,7 @@ Bundled runtime files are redistributed under the Windows App SDK license terms.
 Licensed under the MIT License. Copyright (c) .NET Foundation and Contributors.
 
 ================================================================================
-Optional components (NOT included; downloaded only if you agree, from the official releases,
+Optional component (NOT included; downloaded only if you agree, from the official release,
 and checked against a pinned SHA-256 before use):
 
 PawnIO driver  https://github.com/namazso/PawnIO.Setup  (CPU temperature, clock and power)
-PresentMon     https://github.com/GameTechDev/PresentMon  (FPS), MIT License, Copyright (c) Intel Corporation

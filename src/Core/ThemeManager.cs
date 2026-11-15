@@ -170,88 +170,68 @@ namespace WinMonitor.Core
         private static readonly Dictionary<string, Color> _colorCache = new(32);
         private static readonly object _lock = new object(); 
 
-        public static string ThemeDir
+        /// <summary>True when the panel should be dark: "Dark", or "System" with Windows apps set to dark.</summary>
+        public static bool IsDark(string mode)
         {
-            get
-            {
-                var dir = Path.Combine(AppContext.BaseDirectory, "resources/themes");
-                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-                return dir;
-            }
-        }
-
-        /// <summary>
-        /// 列出可用主题文件名（不含扩展名）
-        /// </summary>
-        public static IEnumerable<string> GetAvailableThemes()
-        {
+            if (mode == "Dark") return true;
+            if (mode == "Light") return false;
             try
             {
-                return Directory.EnumerateFiles(ThemeDir, "*.json")
-                                .Select(Path.GetFileNameWithoutExtension)
-                                .OrderBy(n => n)
-                                .ToArray();
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+                return key?.GetValue("AppsUseLightTheme") is int v ? v == 0 : true;
             }
-            catch
-            {
-                return Array.Empty<string>();
-            }
+            catch { return true; }
         }
 
-        /// <summary>
-        /// 加载指定主题：读取 JSON → 反序列化 → 构建字体 → 设置 Current。
-        /// </summary>
-        public static Theme Load(string name)
+        /// <summary>Builds the Windows 11 style theme (light or dark) and makes it current.</summary>
+        public static Theme Load(string mode)
         {
-            try
-            {
-                var path = Path.Combine(ThemeDir, $"{name}.json");
-                if (!File.Exists(path))
-                    throw new FileNotFoundException("Theme json not found", path);
-
-                var json = File.ReadAllText(path);
-                var theme = JsonSerializer.Deserialize<Theme>(json, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true,
-                    IgnoreReadOnlyProperties = true,
-                    AllowTrailingCommas = true
-                });
-
-                if (theme == null)
-                    throw new Exception("Theme parse failed.");
-                
-                if (theme.Font != null)
-                {
-                    theme.Font.Family = UIUtils.Intern(theme.Font.Family);
-                    if (!string.IsNullOrEmpty(theme.Font.ValueFamily))
-                    {
-                        theme.Font.ValueFamily = UIUtils.Intern(theme.Font.ValueFamily);
-                    }
-                }
-
-                Current = theme;
-                
-                return theme;
-            }
-            catch (Exception ex)
-            {
-                // 兜底主题，保证程序可继续运行
-                Console.WriteLine($"[ThemeManager] Load error: {ex.Message}");
-                var fallback = new Theme();
-                Current = fallback;
-                return fallback;
-            }
+            Current = IsDark(mode) ? Windows11Dark() : Windows11Light();
+            return Current;
         }
-        
-        // ★★★ 修改：删除私有 Intern 方法 ★★★
-        // private static string Intern(string str) ... (删除)
 
-        /// <summary>Makes a theme object the current one (the theme editor's live preview).</summary>
-        public static void SetCurrent(Theme theme) => Current = theme;
+        private static Theme Base() => new()
+        {
+            Version = 3,
+            Layout = new LayoutConfig
+            {
+                RowHeight = 40, Padding = 12, CornerRadius = 8, GroupRadius = 6, GroupPadding = 8,
+                GroupSpacing = 30, GroupBottom = 0, ItemGap = 6, GroupTitleOffset = 6,
+            },
+            Font = new FontConfig
+            {
+                Family = "Segoe UI Variable Text", ValueFamily = "Segoe UI Variable Text",
+                Title = 11, Group = 10, Item = 10, Value = 11, Bold = true,
+            },
+        };
 
-        /// <summary>A deep copy (themes are scaled in place when applied).</summary>
-        public static Theme Clone(Theme theme) =>
-            JsonSerializer.Deserialize<Theme>(JsonSerializer.Serialize(theme)) ?? new Theme();
+        private static Theme Windows11Dark()
+        {
+            var t = Base();
+            t.Name = "Windows 11 Dark";
+            t.Color = new ColorConfig
+            {
+                Background = "#202020", GroupBackground = "#2C2C2C",
+                TextTitle = "#FFFFFF", TextGroup = "#C5C5C5", TextPrimary = "#FFFFFF",
+                ValueSafe = "#6CCB5F", ValueWarn = "#FCE100", ValueCrit = "#FF99A4",
+                BarBackground = "#3D3D3D", BarLow = "#6CCB5F", BarMid = "#FCE100", BarHigh = "#FF99A4",
+            };
+            return t;
+        }
+
+        private static Theme Windows11Light()
+        {
+            var t = Base();
+            t.Name = "Windows 11 Light";
+            t.Color = new ColorConfig
+            {
+                Background = "#F3F3F3", GroupBackground = "#FFFFFF",
+                TextTitle = "#1A1A1A", TextGroup = "#5D5D5D", TextPrimary = "#1A1A1A",
+                ValueSafe = "#0F7B0F", ValueWarn = "#9D5D00", ValueCrit = "#C42B1C",
+                BarBackground = "#E5E5E5", BarLow = "#0F7B0F", BarMid = "#9D5D00", BarHigh = "#C42B1C",
+            };
+            return t;
+        }
 
         private static readonly Color Transparent = Color.FromArgb(0, 0, 0, 0);
 

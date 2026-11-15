@@ -432,7 +432,6 @@ namespace WinMonitor.Core
             else if (key == "CPU.Pump") max = cfg.RecordedMaxCpuPump;
             else if (key == "CASE.Fan") max = cfg.RecordedMaxChassisFan;
             else if (key == "GPU.Fan") max = cfg.RecordedMaxGpuFan;
-            else if (key == "FPS") max = cfg.RecordedMaxFps;
             else if (key == "CPU.Voltage") max = 1.6f;
             else if (key == "BAT.Power") max = 100f;
             else if (key == "BAT.Voltage") max = 20f;

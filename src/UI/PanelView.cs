@@ -20,16 +20,9 @@ namespace WinMonitor.UI
         public GroupLayoutInfo(string name, List<MetricItem> items) { GroupName = name; Items = items; }
     }
 
-    /// <summary>A column of the bar (horizontal) layout: one or two items.</summary>
-    public sealed class Column
-    {
-        public MetricItem? Top;
-        public MetricItem? Bottom;
-    }
-
     /// <summary>
-    /// Draws the panel with WinUI elements. Layout maths ported from LiteMonitor's UILayout / UIRenderer /
-    /// HorizontalLayout (sizes in device-independent pixels; the theme's font sizes are points).
+    /// Draws the panel with WinUI elements. Layout maths ported from LiteMonitor's UILayout / UIRenderer
+    /// (sizes in device-independent pixels; the theme's font sizes are points).
     /// </summary>
     internal sealed class PanelView
     {
@@ -40,8 +33,6 @@ namespace WinMonitor.UI
         private readonly Canvas _canvas = new();
         private readonly Dictionary<MetricItem, ItemVisual> _visuals = new();
         private readonly Dictionary<uint, SolidColorBrush> _brushes = new();
-        private readonly TextBlock _measure = new();
-        private bool _horizontal;
 
         private sealed class ItemVisual
         {
@@ -49,7 +40,6 @@ namespace WinMonitor.UI
             public TextBlock Value = null!;
             public Border? BarFill;
             public double BarWidth;
-            public bool HideLabel;
             public MetricRenderStyle Style;
         }
 
@@ -71,7 +61,7 @@ namespace WinMonitor.UI
             var f = value && !string.IsNullOrWhiteSpace(T.Font.ValueFamily) ? T.Font.ValueFamily : T.Font.Family;
             return new FontFamily(string.IsNullOrWhiteSpace(f) ? "Segoe UI" : f + ", Segoe UI, Segoe UI Emoji");
         }
-        private static FontWeight Weight => T.Font.Bold ? FontWeights.Bold : FontWeights.Normal;
+        private static FontWeight Weight => T.Font.Bold ? FontWeights.SemiBold : FontWeights.Normal;
 
         private SolidColorBrush Brush(Color c)
         {
@@ -140,7 +130,6 @@ namespace WinMonitor.UI
         /// <summary>Lays out and draws the panel. Returns its size in DIPs.</summary>
         public Size BuildVertical(List<GroupLayoutInfo> groups, bool showTitle, string title)
         {
-            _horizontal = false;
             var t = T;
             var L = t.Layout;
             float s = L.LayoutScale <= 0 ? 1f : L.LayoutScale;
@@ -313,124 +302,6 @@ namespace WinMonitor.UI
             return new Size(L.Width, height);
         }
 
-        // ------------------------------------------------------------------ horizontal bar
-        private double MeasureWidth(string text, double pt, bool valueFont)
-        {
-            if (string.IsNullOrEmpty(text)) return 0;
-            _measure.Text = text;
-            _measure.FontFamily = Family(valueFont);
-            _measure.FontSize = Pt(pt);
-            _measure.FontWeight = Weight;
-            _measure.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            return Math.Ceiling(_measure.DesiredSize.Width);
-        }
-
-        private static bool LabelHidden(MetricItem it) => string.IsNullOrEmpty(it.ShortLabel) || it.ShortLabel == " ";
-
-        private double MeasureItem(MetricItem? it, Settings cfg)
-        {
-            if (it == null) return 0;
-            if (LabelHidden(it))
-            {
-                string val = it.TextValue ?? it.GetFormattedText(true);
-                return string.IsNullOrEmpty(val) ? 0 : MeasureWidth(val, T.Font.Item, false) + 4;
-            }
-            return MeasureWidth(it.ShortLabel, T.Font.Item, false) + MeasureWidth(SampleText(it), T.Font.Value, true) + cfg.HorizontalInnerSpacing;
-        }
-
-        /// <summary>The widest text a value can have (digits as 0), so columns do not jump.</summary>
-        private static string SampleText(MetricItem item)
-        {
-            string val = item.TextValue ?? "";
-            string rawUnit = MetricUtils.GetUnitStr(item.Key, 0, MetricUtils.UnitContext.Taskbar);
-            if (string.IsNullOrEmpty(val) && !item.Key.StartsWith("DASH.", StringComparison.OrdinalIgnoreCase))
-            {
-                val = MetricUtils.GetSampleValueStr(item.Key);
-                var type = MetricUtils.GetType(item.Key);
-                if (type == MetricType.DataSpeed || type == MetricType.DataSize) rawUnit = "MB";
-            }
-            string unit = MetricUtils.GetDisplayUnit(item.Key, rawUnit, item.BoundConfig?.UnitPanel);
-            string full = !string.IsNullOrEmpty(unit) && !val.EndsWith(unit) ? val + unit : val;
-            var chars = full.ToCharArray();
-            for (int i = 0; i < chars.Length; i++) if (char.IsDigit(chars[i])) chars[i] = '0';
-            return new string(chars);
-        }
-
-        public Size BuildHorizontal(List<Column> cols, Settings cfg)
-        {
-            _horizontal = true;
-            var t = T;
-            int pad = t.Layout.Padding, padV = t.Layout.Padding / 2;
-            bool single = cfg.HorizontalSingleLine;
-            int rowH = Math.Max(LineH(t.Font.Item), LineH(t.Font.Value));
-            double gap = cfg.HorizontalItemSpacing;
-
-            var widths = new List<double>();
-            double total = pad * 2;
-            foreach (var c in cols)
-            {
-                double cw = Math.Max(MeasureItem(c.Top, cfg), MeasureItem(c.Bottom, cfg));
-                widths.Add(cw);
-                total += cw;
-            }
-            if (cols.Count > 1) total += (cols.Count - 1) * gap;
-            double height = padV * 2 + (single ? rowH : rowH * 2);
-            if (cols.Count == 0) { total = pad * 2; }
-
-            Reset(total, height);
-            var primary = ThemeManager.ParseColor(t.Color.TextPrimary);
-            double x = pad;
-            for (int i = 0; i < cols.Count; i++)
-            {
-                var c = cols[i];
-                void Add(MetricItem? it, double top)
-                {
-                    if (it == null) return;
-                    var rc = new Rect(x, top, widths[i], rowH);
-                    var v = new ItemVisual { HideLabel = LabelHidden(it) };
-                    var color = it.GetTextColor(t);
-                    if (v.HideLabel)
-                    {
-                        v.Label = new TextBlock();
-                        v.Value = Text(it.GetFormattedText(true), t.Font.Item, false, color);
-                        Place(v.Value, rc, HorizontalAlignment.Left, VerticalAlignment.Center);
-                    }
-                    else
-                    {
-                        string label = !string.IsNullOrEmpty(it.ShortLabel) ? it.ShortLabel : (string.IsNullOrEmpty(it.Label) ? it.Key : it.Label);
-                        v.Label = Text(label, t.Font.Item, false, primary);
-                        v.Value = Text(it.GetFormattedText(true), t.Font.Value, true, color);
-                        Place(v.Label, rc, HorizontalAlignment.Left, VerticalAlignment.Center);
-                        Place(v.Value, rc, HorizontalAlignment.Right, VerticalAlignment.Center);
-                    }
-                    _visuals[it] = v;
-                }
-                Add(c.Top, padV);
-                if (!single) Add(c.Bottom, padV + rowH);
-                x += widths[i] + gap;
-            }
-            Update();
-            return new Size(total, height);
-        }
-
-        /// <summary>Changes whenever a text's shape changes, so the bar layout must be rebuilt.</summary>
-        public static string LayoutSignature(List<Column> cols)
-        {
-            unchecked
-            {
-                int hash = 17;
-                void Add(MetricItem? it)
-                {
-                    if (it == null) return;
-                    string text = it.TextValue ?? it.GetFormattedText(true);
-                    hash = hash * 31 + text.Length;
-                    foreach (char ch in text) if (!char.IsDigit(ch)) hash = (hash << 5) - hash + ch;
-                }
-                foreach (var c in cols) { Add(c.Top); Add(c.Bottom); }
-                return hash.ToString();
-            }
-        }
-
         // ------------------------------------------------------------------ per-tick update
         public void Update()
         {
@@ -438,18 +309,13 @@ namespace WinMonitor.UI
             bool narrow = t.Layout.Width < 240 * (t.Layout.LayoutScale <= 0 ? 1 : t.Layout.LayoutScale);
             foreach (var (it, v) in _visuals)
             {
-                string text = _horizontal ? it.GetFormattedText(true)
-                            : it.Style == MetricRenderStyle.TwoColumn ? it.GetFormattedText(narrow)
-                            : it.GetFormattedText(false);
+                string text = it.Style == MetricRenderStyle.TwoColumn ? it.GetFormattedText(narrow) : it.GetFormattedText(false);
                 if (v.Value.Text != text) v.Value.Text = text;
                 var b = Brush(it.GetTextColor(t));
                 if (!ReferenceEquals(v.Value.Foreground, b)) v.Value.Foreground = b;
 
-                if (!_horizontal)
-                {
-                    string label = string.IsNullOrEmpty(it.Label) ? it.Key : it.Label;
-                    if (v.Label.Text != label) v.Label.Text = label;
-                }
+                string label = string.IsNullOrEmpty(it.Label) ? it.Key : it.Label;
+                if (v.Label.Text != label) v.Label.Text = label;
 
                 if (v.BarFill != null)
                 {

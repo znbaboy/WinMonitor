@@ -20,9 +20,7 @@ namespace WinMonitor.UI
         private readonly DispatcherQueueTimer _timer;
 
         private List<GroupLayoutInfo> _groups = new();
-        private List<Column> _cols = new();
         private bool _layoutDirty = true;
-        private string _lastSignature = "";
         private bool _busy;
         private volatile bool _sensorReading;
 
@@ -54,27 +52,14 @@ namespace WinMonitor.UI
             ApplyTheme(false);
         }
 
-        public bool IsHorizontal => _cfg.HorizontalMode;
-
         // ------------------------------------------------------------------ theme & layout
         public void ApplyTheme(bool retainData)
         {
             var t = ThemeManager.Load(_cfg.Skin);
             t.Scale(1f, (float)_cfg.UIScale);          // WinUI works in DIPs: only the user's scale here
             t.Layout.Width = (int)(_cfg.PanelWidth * _cfg.UIScale);
-            if (!retainData || _groups.Count == 0) { BuildMetrics(); BuildColumns(); }
+            if (!retainData || _groups.Count == 0) BuildMetrics();
             _timer.Interval = TimeSpan.FromMilliseconds(Math.Max(80, _cfg.RefreshMs));
-            _layoutDirty = true;
-            Render();
-        }
-
-        /// <summary>Applies a theme object directly (the theme editor's live preview).</summary>
-        public void PreviewTheme(Theme edited)
-        {
-            var theme = ThemeManager.Clone(edited);
-            ThemeManager.SetCurrent(theme);
-            theme.Scale(1f, (float)_cfg.UIScale);
-            theme.Layout.Width = (int)(_cfg.PanelWidth * _cfg.UIScale);
             _layoutDirty = true;
             Render();
         }
@@ -82,7 +67,6 @@ namespace WinMonitor.UI
         public void RebuildLayout()
         {
             BuildMetrics();
-            BuildColumns();
             _layoutDirty = true;
             Render();
         }
@@ -91,18 +75,9 @@ namespace WinMonitor.UI
         {
             if (!_layoutDirty) { _window.View.Update(); return; }
             _layoutDirty = false;
-            Windows.Foundation.Size size;
-            if (_cfg.HorizontalMode)
-            {
-                size = _window.View.BuildHorizontal(_cols, _cfg);
-                _lastSignature = PanelView.LayoutSignature(_cols);
-            }
-            else
-            {
-                string title = LanguageManager.T("Title");
-                if (title == "Title") title = "";
-                size = _window.View.BuildVertical(_groups, _cfg.ShowTitle, title);
-            }
+            string title = LanguageManager.T("Title");
+            if (title == "Title") title = "";
+            var size = _window.View.BuildVertical(_groups, _cfg.ShowTitle, title);
             _window.SetContentSize(size.Width, size.Height);
         }
 
@@ -125,7 +100,6 @@ namespace WinMonitor.UI
                     it.TickSmooth(_cfg.AnimationSpeed);
                 }
                 foreach (var g in _groups) foreach (var it in g.Items) UpdateItem(it);
-                foreach (var c in _cols) { UpdateItem(c.Top); UpdateItem(c.Bottom); }
 
                 if (fresh)
                 {
@@ -142,7 +116,6 @@ namespace WinMonitor.UI
                 CheckBatteryAlert();
                 InfoService.Instance.Update();
 
-                if (_cfg.HorizontalMode && PanelView.LayoutSignature(_cols) != _lastSignature) _layoutDirty = true;
                 Render();
             }
             catch (Exception ex) { Program.Log(ex); }
@@ -175,19 +148,6 @@ namespace WinMonitor.UI
                 list.Add(CreateMetric(c));
             }
             if (list.Count > 0) _groups.Add(new GroupLayoutInfo(current, list) { Label = GroupLabel(current) });
-        }
-
-        private void BuildColumns()
-        {
-            _cols = new List<Column>();
-            var items = VisibleItems().ToList();
-            int step = _cfg.HorizontalSingleLine ? 1 : 2;
-            for (int i = 0; i < items.Count; i += step)
-            {
-                var col = new Column { Top = CreateMetric(items[i]) };
-                if (step == 2 && i + 1 < items.Count) col.Bottom = CreateMetric(items[i + 1]);
-                _cols.Add(col);
-            }
         }
 
         private MetricItem CreateMetric(MonitorItemConfig cfg)

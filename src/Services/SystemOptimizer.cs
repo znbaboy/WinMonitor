@@ -16,50 +16,6 @@ namespace WinMonitor.Services
         #endregion
 
         /// <summary>
-        /// 执行深度内存清理 (针对所有进程)
-        /// </summary>
-        public static void CleanMemory(Action<int>? onProgress = null)
-        {
-            // 1. 自身 GC (0-5%)
-            onProgress?.Invoke(0);
-            GC.Collect(2, GCCollectionMode.Forced, true, true);
-            onProgress?.Invoke(5);
-
-            // 2. 全局清理 (5-100%)
-            try
-            {
-                var procs = Process.GetProcesses();
-                int total = procs.Length;
-                int current = 0;
-
-                if (total == 0) { onProgress?.Invoke(100); return; }
-
-                foreach (var proc in procs)
-                {
-                    try
-                    {
-                        using (proc)
-                        {
-                            if (!proc.HasExited) EmptyWorkingSet(proc.Handle);
-                        }
-                    }
-                    catch 
-                    {
-                        // 忽略无权限访问的系统进程
-                    }
-                    finally
-                    {
-                        current++;
-                        int p = 5 + (int)((double)current / total * 95);
-                        onProgress?.Invoke(Math.Min(p, 100));
-                    }
-                }
-            }
-            catch { }
-            onProgress?.Invoke(100);
-        }
-
-        /// <summary>
         /// 修剪当前进程的工作集内存
         /// </summary>
         public static void TrimWorkingSet()

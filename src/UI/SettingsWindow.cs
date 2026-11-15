@@ -66,18 +66,15 @@ namespace WinMonitor.UI
         private UIElement PanelPage()
         {
             var c = _cfg;
-            var themes = ThemeManager.GetAvailableThemes().ToList();
             double[] opacities = { 1.0, 0.95, 0.9, 0.85, 0.8, 0.75, 0.7, 0.6, 0.5, 0.4, 0.3 };
-            int[] actionIds = { 0, 1, 2, 4 };
+            int[] actionIds = { 2, 1, 5 };
 
             return Ui.Page(
                 Ui.PageTitle(T("Menu.MainFormSettings")),
 
                 Ui.Section(T("Menu.Appearance")),
-                Ui.Row(T("Menu.Theme"), Ui.Combo(themes, themes.FindIndex(n => n.Equals(c.Skin, StringComparison.OrdinalIgnoreCase)),
-                    i => { c.Skin = themes[i]; Save(); _app.ApplyThemeAndLayout(); })),
-                Ui.Row(T("Menu.DisplayMode"), Ui.Combo(new[] { T("Menu.Vertical"), T("Menu.Horizontal") }, c.HorizontalMode ? 1 : 0,
-                    i => { bool old = c.HorizontalMode; c.HorizontalMode = i == 1; Save(); _app.ApplyThemeAndLayout(old); })),
+                Ui.Row(T("Menu.Theme"), Ui.Combo(AppHost.ThemeModes.Select(m => m.Label), Array.FindIndex(AppHost.ThemeModes, m => m.Key == c.Skin),
+                    i => { c.Skin = AppHost.ThemeModes[i].Key; Save(); _app.ApplyAppTheme(); }), "Windows 11 style, light or dark."),
                 Ui.Row(T("Menu.Width"), Ui.NumberUnit(c.PanelWidth, 100, 10000, "px",
                     v => { c.PanelWidth = (int)v; Save(); _app.ApplyThemeAndLayout(retainData: true); }, 10)),
                 Ui.Row(T("Menu.Opacity"), Ui.Combo(opacities.Select(o => $"{o * 100:0}%"), Array.FindIndex(opacities, o => Math.Abs(o - c.Opacity) < 0.01),
@@ -95,7 +92,7 @@ namespace WinMonitor.UI
                 Ui.Row(T("Menu.ClickThrough"), Ui.Toggle(c.ClickThrough, v => { c.ClickThrough = v; Save(); _app.ApplyWindowAttributes(); }),
                     "Clicks go to the window underneath. Use the tray icon to reach the menu."),
                 Ui.Row(T("Menu.DoubleClickAction"), Ui.Combo(
-                    new[] { T("Menu.ActionSwitchLayout"), T("Menu.ActionTaskMgr"), T("Menu.ActionSettings"), T("Menu.CleanMemory") },
+                    new[] { T("Menu.ActionSettings"), T("Menu.ActionTaskMgr"), "Nothing" },
                     Math.Max(0, Array.IndexOf(actionIds, c.MainFormDoubleClickAction)),
                     i => { c.MainFormDoubleClickAction = actionIds[i]; Save(); })),
 
@@ -105,14 +102,7 @@ namespace WinMonitor.UI
                 Ui.Row(T("Menu.DevicesPsFullMode"), Ui.Toggle(c.HaloPsBluetoothFullMode, v => { c.HaloPsBluetoothFullMode = v; Save(); }),
                     T("Menu.DevicesPsFullModeHint")),
                 Ui.Row(T("Menu.DevicesReport"), Ui.Button(T("Menu.DevicesReportCopy"), CopyDeviceReport),
-                    "What each device reader saw, for troubleshooting a device that does not show."),
-
-                Ui.Section(T("Menu.Horizontal")),
-                Ui.Row(T("Menu.TaskbarSingleLine"), Ui.Toggle(c.HorizontalSingleLine, v => { c.HorizontalSingleLine = v; Save(); _app.ApplyThemeAndLayout(); })),
-                Ui.Row(T("Menu.TaskbarItemSpacing"), Ui.NumberUnit(c.HorizontalItemSpacing, 0, 200, "px",
-                    v => { c.HorizontalItemSpacing = (int)v; Save(); _app.ApplyThemeAndLayout(retainData: true); })),
-                Ui.Row(T("Menu.TaskbarInnerSpacing"), Ui.NumberUnit(c.HorizontalInnerSpacing, 0, 200, "px",
-                    v => { c.HorizontalInnerSpacing = (int)v; Save(); _app.ApplyThemeAndLayout(retainData: true); }))
+                    "What each device reader saw, for troubleshooting a device that does not show.")
             );
         }
 
@@ -485,9 +475,8 @@ namespace WinMonitor.UI
                     "• LibreHardwareMonitor (MPL-2.0): sensor readings\n" +
                     "• Windows App SDK / WinUI 3 (MIT)\n" +
                     "• WinUIEx by Morten Nielsen (MIT): see-through window technique\n\n" +
-                    "Optional downloads, from their official releases only:\n" +
-                    "• PawnIO driver (namazso): CPU temperature, clock and power\n" +
-                    "• PresentMon by Intel (MIT): FPS\n\n" +
+                    "Optional download, from its official release only:\n" +
+                    "• PawnIO driver (namazso): CPU temperature, clock and power\n\n" +
                     "Full licence texts: THIRD-PARTY-NOTICES.txt next to WinMonitor.exe.",
             };
 

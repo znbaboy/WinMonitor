@@ -33,7 +33,6 @@ namespace WinMonitor.Core
         public static readonly string[] LoadKeys = { "CPU.Load", "GPU.Load", "MEM.Load" };
         public static readonly string[] FrequencyKeys = { "CPU.Clock", "GPU.Clock" };
         public static readonly string[] PowerKeys = { "CPU.Power", "GPU.Power", "BAT.Power" };
-        public static readonly string[] FpsKeys = { "FPS" };
 
         private static readonly string _filePath = Path.Combine(AppContext.BaseDirectory, "HardwareHistory.json");
         private static readonly string _backupPath = Path.Combine(AppContext.BaseDirectory, "HardwareHistory.json.bak");
@@ -45,7 +44,7 @@ namespace WinMonitor.Core
         private static readonly TimeSpan _saveInterval = TimeSpan.FromMinutes(5);
 
         private static readonly HashSet<string> _supportedKeys = new HashSet<string>(
-            TemperatureKeys.Concat(LoadKeys).Concat(FrequencyKeys).Concat(PowerKeys).Concat(FpsKeys),
+            TemperatureKeys.Concat(LoadKeys).Concat(FrequencyKeys).Concat(PowerKeys),
             StringComparer.OrdinalIgnoreCase);
 
         private static DateTime _lastSampleTime = DateTime.MinValue;

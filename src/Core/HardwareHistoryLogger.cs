@@ -105,7 +105,7 @@ namespace WinMonitor.Core
                     try { value = readValue(key); }
                     catch (Exception ex)
                     {
-                        Debug.WriteLine($"[HardwareHistoryLogger] 读取硬件趋势采样失败: {key}, {ex.Message}");
+                        Debug.WriteLine($"[HardwareHistoryLogger] could not read a sample: {key}, {ex.Message}");
                         continue;
                     }
 
@@ -179,7 +179,7 @@ namespace WinMonitor.Core
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"[HardwareHistoryLogger] 保存硬件趋势失败: {ex.Message}");
+                    Debug.WriteLine($"[HardwareHistoryLogger] could not save the history: {ex.Message}");
                     CleanupTempFile();
                 }
             }
@@ -224,7 +224,7 @@ namespace WinMonitor.Core
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[HardwareHistoryLogger] 读取硬件趋势失败: {path}, {ex.Message}");
+                Debug.WriteLine($"[HardwareHistoryLogger] could not read the history: {path}, {ex.Message}");
                 return null;
             }
         }
@@ -314,7 +314,7 @@ namespace WinMonitor.Core
             if (File.Exists(_filePath))
             {
                 try { File.Copy(_filePath, _backupPath, true); }
-                catch (Exception ex) { Debug.WriteLine($"[HardwareHistoryLogger] 写入备份失败: {ex.Message}"); }
+                catch (Exception ex) { Debug.WriteLine($"[HardwareHistoryLogger] could not write the backup: {ex.Message}"); }
             }
 
             File.Move(_tempPath, _filePath, true);
@@ -328,7 +328,7 @@ namespace WinMonitor.Core
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[HardwareHistoryLogger] 清理临时文件失败: {ex.Message}");
+                Debug.WriteLine($"[HardwareHistoryLogger] could not remove the temporary file: {ex.Message}");
             }
         }
 

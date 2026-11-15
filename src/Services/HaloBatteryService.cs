@@ -18,7 +18,7 @@ namespace WinMonitor.Services
     }
 
     /// <summary>
-    /// [Halo] Built-in Halo Battery. The panel has one row per device type (Monitor Items:
+    /// Built-in Halo Battery. The panel has one row per device type (Monitor Items:
     /// HALO.Mouse, HALO.Keyboard, ...); each row shows the first connected device of its type.
     /// </summary>
     public static class HaloBatteryService

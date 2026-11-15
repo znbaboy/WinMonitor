@@ -125,18 +125,18 @@ namespace WinMonitor.Services.Halo
         private readonly Dictionary<string, (string Path, int Tid)> _cache = new();
         private readonly Dictionary<string, DateTime> _dead = new();
 
-        // [Fix] Interfaces that have answered before, and read errors in a row on a device's cached
+        // Interfaces that have answered before, and read errors in a row on a device's cached
         // interface. Right after the mouse wakes up the receiver can fail a read or two. Halo Battery
         // then drops the cached interface and blacklists every interface for 5 minutes (its greyed
         // last level hides that gap); here the row would show a dash for those 5 minutes instead.
         private readonly HashSet<string> _worked = new();
         private readonly Dictionary<string, int> _ioErrors = new();
 
-        // [Fix] The transaction id that last gave a battery reading, per device. While the mouse wakes
+        // The transaction id that last gave a battery reading, per device. While the mouse wakes
         // up, the right id (0x1F for most mice) can briefly fail; the scan then went on to other ids,
         // and one the receiver always answers with "not responding" (0xFF on the DeathAdder V3
         // HyperSpeed) was cached. Every later check then got "not responding", so the mouse looked
-        // asleep forever (until LiteMonitor restarted). Only the trusted id may be cached for "asleep".
+        // asleep forever (until WinMonitor restarted). Only the trusted id may be cached for "asleep".
         private readonly Dictionary<string, int> _goodTid = new();
 
         private int? TrustedTid(string gkey, int? prefTid) => _goodTid.TryGetValue(gkey, out var t) ? t : prefTid;
@@ -335,7 +335,7 @@ namespace WinMonitor.Services.Halo
                         if (s == StatusOk) _goodTid[gkey] = cached.Tid;
                         return (s.Value, l, c);
                     }
-                    // [Fix] a read error on the interface that worked: usually the receiver is busy
+                    // a read error on the interface that worked: usually the receiver is busy
                     // (the mouse is waking up). Keep it and try again next time instead of rescanning.
                     if (s == null)
                     {
@@ -385,7 +385,7 @@ namespace WinMonitor.Services.Halo
                         timeoutHit = (status.Value, null, null);
                         _worked.Add(d.Path);
                         if (trustedTid) { _cache[gkey] = (d.Path, tid); break; }
-                        continue;   // [Fix] not cached: the next check scans again, trusted id first
+                        continue;   // not cached: the next check scans again, trusted id first
                     }
                     if (status == StatusForeign)
                     {
@@ -395,7 +395,7 @@ namespace WinMonitor.Services.Halo
                     }
                 }
                 // an interface that never answers is left alone for 5 minutes (Halo Battery);
-                // [Fix] one that has worked before is only skipped briefly (a waking receiver)
+                // one that has worked before is only skipped briefly (a waking receiver)
                 if (!answered) _dead[d.Path] = now.AddSeconds(_worked.Contains(d.Path) ? RetryWorkedSeconds : 300);
             }
             return timeoutHit;

@@ -5,53 +5,51 @@ namespace WinMonitor.Core
     public static class MetricLabelResolver
     {
         /// <summary>
-        /// 统一解析监控项的主标签 (Name)
-        /// 优先级：UserLabel > InfoService(Runtime) > DynamicLabel(Config)
+        /// Resolves an item's name.
+        /// Order: UserLabel > live label (InfoService) > DynamicLabel (settings)
         /// </summary>
         public static string ResolveLabel(MonitorItemConfig config)
         {
             if (config == null) return "";
 
-            // 1. 用户自定义 (最高优先级)
+            // 1. The user's name
             if (!string.IsNullOrEmpty(config.UserLabel)) 
                 return config.UserLabel;
             
-            // 2. 运行时动态注入 (高优先级)
-            // 插件运行过程中会实时向 InfoService 注入 PROP.Label.Key
-            // [Optimization] Use cached key if available
+            // 2. Live label injected at runtime
+            // (stored in InfoService as PROP.Label.<key>)
+            // Use cached key if available
             string dynKey = !string.IsNullOrEmpty(config.CachedPropLabelKey) 
                 ? config.CachedPropLabelKey 
                 : "PROP.Label." + config.Key;
 
             string dynVal = InfoService.Instance.GetValue(dynKey);
             
-            // 业务约束：如果动态值为 ERROR 或空，则尝试降级 (避免闪烁或显示错误)
-            // 但 InfoService 通常只存最新有效值(除非插件显式写入Error)
+            // Skip empty or ERROR values (avoids flicker)
             if (!string.IsNullOrEmpty(dynVal)) 
                 return dynVal;
 
-            // 3. 配置中的动态标签 (中优先级)
-            // 这是由 SyncService 定期同步并持久化保存的快照
+            // 3. Last known dynamic label saved in the settings
             if (!string.IsNullOrEmpty(config.DynamicLabel)) 
                 return config.DynamicLabel;
 
-            // 4. 默认/失败
+            // 4. Nothing: caller uses the default
             return ""; 
         }
 
         /// <summary>
-        /// 统一解析监控项的简略标签 (Taskbar)
-        /// 优先级：TaskbarLabel > InfoService(Runtime) > DynamicTaskbarLabel(Config)
+        /// Resolves an item's short label.
+        /// Order: TaskbarLabel > live label (InfoService) > DynamicTaskbarLabel (settings)
         /// </summary>
         public static string ResolveShortLabel(MonitorItemConfig config)
         {
             if (config == null) return "";
 
-            // 1. 用户自定义
+            // 1. The user's short label
             if (!string.IsNullOrEmpty(config.TaskbarLabel)) 
                 return config.TaskbarLabel;
 
-            // 2. 运行时动态注入
+            // 2. Live label injected at runtime
             string dynKey = !string.IsNullOrEmpty(config.CachedPropShortLabelKey)
                 ? config.CachedPropShortLabelKey
                 : "PROP.ShortLabel." + config.Key;

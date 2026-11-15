@@ -7,17 +7,17 @@ using WinMonitor.Core;
 namespace WinMonitor.Core
 {
     /// <summary>
-    /// 管理主题文件：加载、保存、新建、复制、重命名、删除
+    /// Theme files: load, save, create, duplicate, rename, delete
     /// </summary>
     public static class ThemeFileService
     {
         /// <summary>
-        /// 主题目录
+        /// Theme folder
         /// </summary>
         private static string Dir => ThemeManager.ThemeDir;
 
         /// <summary>
-        /// 列出所有主题文件
+        /// All theme files
         /// </summary>
         public static List<string> ListThemes()
         {
@@ -34,7 +34,7 @@ namespace WinMonitor.Core
         }
 
         /// <summary>
-        /// 加载主题 JSON → Theme 对象
+        /// Loads a theme file
         /// </summary>
         public static Theme LoadTheme(string name)
         {
@@ -59,7 +59,7 @@ namespace WinMonitor.Core
         }
 
         /// <summary>
-        /// 保存 Theme 对象 → JSON 文件
+        /// Saves a theme to its file
         /// </summary>
         public static void SaveTheme(string name, Theme theme)
         {
@@ -73,7 +73,7 @@ namespace WinMonitor.Core
         }
 
         /// <summary>
-        /// 新建主题（复制模板）
+        /// Creates a theme (copy of the template)
         /// </summary>
         public static void CreateTheme(string name)
         {
@@ -82,7 +82,7 @@ namespace WinMonitor.Core
             if (File.Exists(path))
                 throw new Exception("Theme already exists: " + name);
 
-            // 默认复制当前主题模板
+            // Start from the current theme
             string template = Path.Combine(Dir, "DarkFlat_Classic.json");
 
             if (File.Exists(template))
@@ -92,7 +92,7 @@ namespace WinMonitor.Core
         }
 
         /// <summary>
-        /// 复制主题
+        /// Duplicates a theme
         /// </summary>
         public static void DuplicateTheme(string src, string dst)
         {
@@ -109,7 +109,7 @@ namespace WinMonitor.Core
         }
 
         /// <summary>
-        /// 重命名主题
+        /// Renames a theme
         /// </summary>
         public static void RenameTheme(string src, string dst)
         {
@@ -126,7 +126,7 @@ namespace WinMonitor.Core
         }
 
         /// <summary>
-        /// 删除主题
+        /// Deletes a theme
         /// </summary>
         public static void DeleteTheme(string name)
         {
@@ -136,7 +136,7 @@ namespace WinMonitor.Core
         }
 
         /// <summary>
-        /// 安全写入（避免 JSON 写坏）
+        /// Writes via a temporary file so a failed write cannot break the JSON
         /// </summary>
         private static void SafeWrite(string path, string content)
         {

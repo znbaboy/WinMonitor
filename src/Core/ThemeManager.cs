@@ -9,22 +9,22 @@ using System.Text.Json.Serialization;
 namespace WinMonitor.Core
 {
     /// <summary>
-    /// 布局配置：仅保留当前代码实际用到的字段
-    /// - width:            窗体宽度（最终由 Settings.PanelWidth 覆盖）
-    /// - rowHeight:        行高（各监控项基准高度）
-    /// - padding:          画布外边距
-    /// - cornerRadius:     窗体圆角（MainForm 应用）
-    /// - groupRadius:      组块圆角（UIRenderer 应用）
-    /// - groupPadding:     组块内边距
-    /// - groupSpacing:     组块之间的垂直间距
-    /// - groupBottom:      组块额外底部留白
-    /// - itemGap:          监控项之间的垂直间距
-    /// - groupTitleOffset: 组标题与块体的垂直微调
+    /// Layout values:
+    /// - width:            panel width (replaced by Settings.PanelWidth)
+    /// - rowHeight:        row height
+    /// - padding:          space around the content
+    /// - cornerRadius:     panel corner radius
+    /// - groupRadius:      group corner radius
+    /// - groupPadding:     space inside a group
+    /// - groupSpacing:     space between groups
+    /// - groupBottom:      extra space under a group
+    /// - itemGap:          space between rows
+    /// - groupTitleOffset: group title position
     /// </summary>
     public class LayoutConfig
     {
-        public int Width { get; set; } = 240;//不会被实际使用，运行时由 Settings.PanelWidth 覆盖
-        public float LayoutScale { get; set; } = 1.0f;//不会被实际使用，运行时由 Settings.PanelWidth 覆盖
+        public int Width { get; set; } = 240; // set at runtime from Settings.PanelWidth
+        public float LayoutScale { get; set; } = 1.0f; // set at runtime from the scale settings
         public int RowHeight { get; set; } = 40;
         public int Padding { get; set; } = 12;
 
@@ -61,12 +61,11 @@ namespace WinMonitor.Core
     }
 
     /// <summary>
-    /// 字体配置：
-    /// - family       : 文本主字体
-    /// - valueFamily  : 数值字段单独字体（等宽可读性更好）
-    /// - title/group/item/value: 四类字号
-    /// - bold         : 是否加粗（四类统一按该值生效）
-    /// - scale        : DPI/喜好缩放系数（0.5~3.0）
+    /// Fonts:
+    /// - family       : text font
+    /// - valueFamily  : font for values
+    /// - title/group/item/value: sizes in points
+    /// - bold         : bold text
     /// </summary>
     public class FontConfig
     {
@@ -83,7 +82,7 @@ namespace WinMonitor.Core
     }
 
     /// <summary>
-    /// 阈值定义（warn/crit），渲染中用于切换颜色。
+    /// Warn / critical levels (switch colours)
     /// </summary>
     public class ThresholdSet
     {
@@ -92,7 +91,7 @@ namespace WinMonitor.Core
     }
 
     /// <summary>
-    /// 各类指标的阈值配置（按当前 UIRenderer 的使用保留）。
+    /// Thresholds by metric
     /// </summary>
     public class ThresholdConfig
     {
@@ -104,7 +103,7 @@ namespace WinMonitor.Core
     }
 
     /// <summary>
-    /// 颜色配置：只保留实际使用的颜色键
+    /// Colours
     /// - Background / GroupBackground
     /// - TextTitle / TextGroup / TextPrimary
     /// - ValueSafe / ValueWarn / ValueCrit
@@ -131,8 +130,7 @@ namespace WinMonitor.Core
     }
 
     /// <summary>
-    /// Theme 主对象：聚合 Layout / Font / Threshold / Color。
-    /// 运行期还会构建 4 类 Font 对象供渲染使用。
+    /// A theme: layout, fonts, thresholds and colours.
     /// </summary>
     public class Theme
     {
@@ -158,15 +156,12 @@ namespace WinMonitor.Core
 
 
     /// <summary>
-    /// 主题管理器：负责读取 JSON、反序列化、构建字体、暴露 Current。
-    /// 注意：不在此处做清缓存；清缓存应在 UIController.ApplyTheme() 统一处理。
+    /// Loads themes and holds the current one.
     /// </summary>
     public static class ThemeManager
     {
         public static Theme Current { get; private set; } = new Theme();
         
-        // ★★★ 修改：移除 _stringPool，只保留 _colorCache ★★★
-        // private static readonly Dictionary<string, string> _stringPool ... (删除)
         private static readonly Dictionary<string, Color> _colorCache = new(32);
         private static readonly object _lock = new object(); 
 
@@ -317,7 +312,7 @@ namespace WinMonitor.Core
             if (string.IsNullOrWhiteSpace(colorStr)) 
                 return Transparent;
 
-            // ★★★ 修改：使用 UIUtils 的全局池 ★★★
+            // Use the shared string pool
             string key = UIUtils.Intern(colorStr);
             
             lock (_lock)
@@ -358,7 +353,7 @@ namespace WinMonitor.Core
                     : colorStr.Equals("black", StringComparison.OrdinalIgnoreCase) ? Color.FromArgb(255, 0, 0, 0) : Transparent;
             }
 
-            // 🔒 写缓存加锁
+            // lock while writing the cache
             lock (_lock)
             {
                 _colorCache[key] = color;
@@ -366,14 +361,5 @@ namespace WinMonitor.Core
             return color;
         }
 
-        public static void ClearCaches()
-        {
-            lock (_lock) // 🔒 加锁
-            {
-                _colorCache.Clear();
-                // _stringPool.Clear(); (删除，这里不需要清理全局字符串，因为主题切换不影响硬件Key)
-            }
-
-        }
     }
 }

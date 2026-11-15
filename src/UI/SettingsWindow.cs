@@ -86,8 +86,6 @@ namespace WinMonitor.UI
                 Ui.Row(T("Menu.HideMainForm"), Ui.Toggle(c.HideMainForm, v => { c.HideMainForm = v; Save(); _app.ApplyVisibility(); })),
                 Ui.Row(T("Menu.TopMost"), Ui.Toggle(c.TopMost, v => { c.TopMost = v; Save(); _app.ApplyWindowAttributes(); })),
                 Ui.Row(T("Menu.ClampToScreen"), Ui.Toggle(c.ClampToScreen, v => { c.ClampToScreen = v; Save(); })),
-                Ui.Row(T("Menu.AutoHide"), Ui.Toggle(c.AutoHide, v => { c.AutoHide = v; Save(); _app.ApplyWindowAttributes(); }),
-                    "Slides the panel off the screen edge when it is docked there; point at the edge to bring it back."),
                 Ui.Row(T("Menu.ClickThrough"), Ui.Toggle(c.ClickThrough, v => { c.ClickThrough = v; Save(); _app.ApplyWindowAttributes(); }),
                     "Clicks go to the window underneath. Use the tray icon to reach the menu."),
                 Ui.Row(T("Menu.DoubleClickAction"), Ui.Combo(

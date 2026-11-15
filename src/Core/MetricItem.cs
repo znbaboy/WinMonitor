@@ -1,8 +1,8 @@
 using System;
 using Windows.UI;
-using System.Linq; // 需要 Linq 来查询 Config
+using System.Linq;
 using WinMonitor.Core;
-using WinMonitor.Services; // [New] For Plugin Color Override
+using WinMonitor.Services; // InfoService (dashboard values and colours)
 
 namespace WinMonitor
 {
@@ -15,12 +15,12 @@ namespace WinMonitor
 
     public class MetricItem
     {
-        // [新增] 绑定原始配置对象，实现动态 Label
+        // The item's settings entry (for its live label and unit)
         public MonitorItemConfig BoundConfig { get; set; }
 
         private string _key = "";
         
-        // [Optimization] 缓存 InfoService 查找键
+        // Cached InfoService lookup key
         private string? _dashColorKey;
         private const string PluginPrefix = "DASH.";
 
@@ -30,12 +30,11 @@ namespace WinMonitor
             set 
             {
                 _key = UIUtils.Intern(value);
-                // 预计算查找键
-                // [Fix] 使用 OrdinalIgnoreCase 并正确处理可空性
+                // Pre-compute the lookup key
                 if (_key.StartsWith(PluginPrefix, StringComparison.OrdinalIgnoreCase))
                 {
-                    // 移除 "DASH." 前缀 (长度=5) 并追加 ".Color"
-                    // 使用 Span 避免中间子字符串分配 (CA1845)
+                    // Strip the "DASH." prefix (5 chars) and append ".Color"
+                    // Span avoids an intermediate substring
                     _dashColorKey = UIUtils.Intern(string.Concat(_key.AsSpan(PluginPrefix.Length), ".Color".AsSpan()));
                 }
                 else
@@ -50,7 +49,7 @@ namespace WinMonitor
         {
             get 
             {
-                // [Refactor] 使用统一的 Label 解析器
+                // Shared label rules (MetricLabelResolver)
                 string labelResolved = MetricLabelResolver.ResolveLabel(BoundConfig);
                 if (!string.IsNullOrEmpty(labelResolved)) return labelResolved;
 
@@ -64,7 +63,7 @@ namespace WinMonitor
         {
             get 
             {
-                // [Refactor] 使用统一的 Label 解析器
+                // Shared label rules (MetricLabelResolver)
                 string shortResolved = MetricLabelResolver.ResolveShortLabel(BoundConfig);
                 if (!string.IsNullOrEmpty(shortResolved)) return shortResolved;
 
@@ -78,23 +77,22 @@ namespace WinMonitor
         public string TextValue { get; set; } = null;
 
         // =============================
-        // 缓存字段
+        // Text caches
         // =============================
         private float _cachedDisplayValue = -99999f; 
-        private (bool Ac, bool Charging) _cachedPowerState = (false, false); // [Fix] 缓存完整电源状态
-        private string _cachedNormalText = "";       // 完整文本 (值+单位)
-        private string _cachedHorizontalText = "";   // 完整横屏文本
+        private (bool Ac, bool Charging) _cachedPowerState = (false, false); // Last power state (battery items refresh when it changes)
+        private string _cachedNormalText = ""; // Full text (value + unit)
+        private string _cachedHorizontalText = ""; // Compact text (value + short unit)
         
-        // ★★★ [新增] 分离缓存 ★★★
         public string CachedValueText { get; private set; } = "";
         public string CachedUnitText { get; private set; } = "";
-        public bool HasCustomUnit { get; private set; } = false; // 标记是否使用了自定义单位
+        public bool HasCustomUnit { get; private set; } = false; // True when the user set a custom unit
 
 
         public int CachedColorState { get; private set; } = 0;
         public double CachedPercent { get; private set; } = 0.0;
 
-        // [Halo] Item fed directly by code (no config, no InfoService): label, text, colour and bar
+        // Item fed directly by code (no config, no InfoService): label, text, colour and bar
         public bool IsDirect { get; private set; } = false;
 
         public void SetDirect(string label, string text, int colorState, double percent)
@@ -113,9 +111,9 @@ namespace WinMonitor
 
         public string GetFormattedText(bool isHorizontal)
         {
-            if (IsDirect) return TextValue ?? ""; // [Halo]
+            if (IsDirect) return TextValue ?? ""; // 
 
-            // [Debug & Fix] 1. Always update color state for Plugin Items FIRST
+            // 1. Dashboard items: take their colour state first
             if (_dashColorKey != null) // Use cached check
             {
                 string colorVal = InfoService.Instance.GetValue(_dashColorKey);
@@ -141,21 +139,21 @@ namespace WinMonitor
                  cfg = Settings.Load().MonitorItems.FirstOrDefault(x => x.Key == Key);
             }
             
-            string? userFormat = cfg?.UnitPanel;   // [Cleanup] one unit setting for both layouts
+            string? userFormat = cfg?.UnitPanel;   // one unit setting for both layouts
             HasCustomUnit = !string.IsNullOrEmpty(userFormat);
 
-            // 3. Return TextValue (Plugin/Dashboard items)
+            // 3. Dashboard items: return their text
            if (TextValue != null) 
             {
-                // [Optimization] 统一使用 MetricUtils 处理单位逻辑
-                // 1. 获取默认单位 (自动处理：插件查InfoService，硬件查表)
+                // Units come from MetricUtils:
+                // 1. Default unit for this key
                 var ctx = isHorizontal ? MetricUtils.UnitContext.Taskbar : MetricUtils.UnitContext.Panel;
                 string defUnit = MetricUtils.GetUnitStr(Key, null, ctx);
 
-                // 2. 确定最终单位 (自动处理：用户设为Null时用默认，否则用自定义)
+                // 2. The user's unit, or the default when none is set
                 string finalUnit = MetricUtils.GetDisplayUnit(Key, defUnit, userFormat);
 
-                // 3. 智能拼接：如果文本里还没包含这个单位，就拼上去
+                // 3. Append the unit unless the text already ends with it
                 if (!string.IsNullOrEmpty(finalUnit) && !TextValue.EndsWith(finalUnit))
                 {
                     return TextValue + finalUnit;
@@ -165,24 +163,21 @@ namespace WinMonitor
             }
 
             // 4. Numeric Value Processing (Hardware items)
-            // [Fix] 增加充电状态检查：如果数值变了 OR (是电池相关项 AND 电源状态变了) -> 强制刷新
+            // Refresh when the value changed, or when a battery item's power state changed
             bool isBat = Key.StartsWith("BAT", StringComparison.OrdinalIgnoreCase);
             var currentPower = MetricUtils.GetPowerStatus();
             bool powerChanged = isBat && (_cachedPowerState != currentPower);
 
-            // [Fix] 降低缓存失效阈值：从 0.05 降低到 0.005
-            // 之前的 0.05 太大，导致当数值从 0.06 变为 0.00 时，虽然 DisplayValue 变了，
-            // 但因为 delta (0.06) 刚刚好大于 0.05 可能触发更新，
-            // 但如果是 0.04 -> 0.00，delta=0.04 < 0.05，导致文本缓存不更新，UI 仍显示 0.04。
-            // 考虑到显示精度通常为 0.00，阈值应至少小于 0.01。
+            // Refresh threshold 0.005: values show with 2 decimals, so anything larger
+            // could leave a stale value on screen (e.g. 0.04 -> 0.00 would not refresh at 0.05).
             if (Math.Abs(DisplayValue - _cachedDisplayValue) > 0.005f || powerChanged)
             {
                 _cachedDisplayValue = DisplayValue;
                 if (isBat) _cachedPowerState = currentPower;
 
-                // [Refactor] 使用新的原子函数分别构建普通和紧凑文本
+                // Build the normal and the compact text
                 
-                // === 1. 更新主界面缓存 (Panel) ===
+                // 1. Panel text
                 string? userFmtPanel = cfg?.UnitPanel;
                 string valNormal = MetricUtils.GetValueStr(Key, DisplayValue, false, userFmtPanel);
                 string unitNormal = MetricUtils.GetUnitStr(Key, DisplayValue, MetricUtils.UnitContext.Panel);
@@ -190,13 +185,13 @@ namespace WinMonitor
                 string finalUnitPanel = MetricUtils.GetDisplayUnit(Key, unitNormal, userFmtPanel);
                 _cachedNormalText = valNormal + finalUnitPanel;
 
-                // === 2. 更新任务栏缓存 (Taskbar/Horizontal) ===
-                // 逻辑修正：任务栏模式下，必须使用 Taskbar 上下文 (例如不带 /s)
-                string? userFmtTaskbar = cfg?.UnitPanel;   // [Cleanup] the taskbar unit setting is gone
+                // 2. Compact text (short units)
+                // Compact text uses the compact unit context (e.g. no /s)
+                string? userFmtTaskbar = cfg?.UnitPanel;   // the compact text uses the panel unit
                 bool hasCustomTaskbar = !string.IsNullOrEmpty(userFmtTaskbar);
                 
-                // 自动模式：启用数值压缩 (Compact=true) 和 紧凑单位 (Taskbar Context)
-                // 自定义模式：不做数值压缩 (false)，但单位仍需基于 Taskbar 上下文计算基础值
+                // Automatic unit: compact number and short unit
+                // Custom unit: full number, unit based on the compact context
                 bool compact = !hasCustomTaskbar;
                 
                 string valTaskbar = MetricUtils.GetValueStr(Key, DisplayValue, compact, userFmtTaskbar);
@@ -205,7 +200,7 @@ namespace WinMonitor
                 string finalUnitTaskbar = MetricUtils.GetDisplayUnit(Key, unitTaskbar, userFmtTaskbar);
                 _cachedHorizontalText = valTaskbar + finalUnitTaskbar;
 
-                // 更新公共属性以便调试 (显示当前请求模式的值)
+                // Keep the public text in sync (useful when debugging)
                 if (isHorizontal)
                 {
                     CachedValueText = valTaskbar;
@@ -219,7 +214,7 @@ namespace WinMonitor
                     HasCustomUnit = !string.IsNullOrEmpty(userFmtPanel);
                 }
 
-                // Only calculate color if NOT a plugin item (already handled above)
+                // Colour state for hardware items (dashboard items were handled above)
                 if (!Key.StartsWith("DASH."))
                 {
                     CachedColorState = MetricUtils.GetState(Key, DisplayValue);
@@ -238,14 +233,14 @@ namespace WinMonitor
             float target = Value.Value;
             float diff = Math.Abs(target - DisplayValue);
             
-            // ★★★ [Fix] 核心修复：微小差异直接吸附，而不是跳过 ★★★
+            // Snap tiny differences straight to the target instead of skipping them
             if (diff < 0.05f) 
             {
                 DisplayValue = target;
                 return;
             }
 
-            // 大幅跳变或高速模式直接更新
+            // Big jumps, or fast animation: update straight away
             if (diff > 15f || speed >= 0.9) DisplayValue = target;
             else DisplayValue += (float)((target - DisplayValue) * speed);
         }

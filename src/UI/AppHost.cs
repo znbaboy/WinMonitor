@@ -104,7 +104,7 @@ namespace WinMonitor.UI
             Cfg.HideMainForm = false;
             Cfg.Save();
             Panel.ShowPanel(activate: false);
-            Panel.ForceShow();
+            Panel.ClampToScreen(true);
         }
 
         public void HidePanel()
@@ -230,7 +230,6 @@ namespace WinMonitor.UI
             var mode = new List<MenuEntry>
             {
                 Toggle(T("Menu.TopMost"), c.TopMost, v => c.TopMost = v, ApplyWindowAttributes),
-                Toggle(T("Menu.AutoHide"), c.AutoHide, v => c.AutoHide = v, ApplyWindowAttributes),
                 Toggle(T("Menu.ClampToScreen"), c.ClampToScreen, v => c.ClampToScreen = v, null),
                 Toggle(T("Menu.ClickThrough"), c.ClickThrough, v => c.ClickThrough = v, ApplyWindowAttributes),
                 MenuEntry.Separator,

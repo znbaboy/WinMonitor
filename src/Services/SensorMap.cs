@@ -7,18 +7,18 @@ using WinMonitor.Core;
 namespace WinMonitor.Services
 {
     /// <summary>
-    /// 核心服务：负责将物理硬件传感器映射为标准 Key (如 CPU.Temp)
+    /// Maps hardware sensors to standard keys (e.g. CPU.Temp)
     /// </summary>
     public class SensorMap
     {
-        // 核心映射字典
+        // Key -> sensor
         private readonly Dictionary<string, ISensor> _map = new();
         
-        // ★★★ [新增] 引入子服务：风扇匹配器 (解耦) ★★★
+        // Fan matching
         private readonly FanMapper _fanMapper = new FanMapper();
 
-        // 高性能缓存
-        // CPU 核心传感器对 (用于加权平均计算)
+        // Fast caches
+        // CPU core load/clock pairs (for the weighted average)
         public class CpuCoreSensors
         {
             public ISensor? Clock;
@@ -26,24 +26,23 @@ namespace WinMonitor.Services
         }
         public List<CpuCoreSensors> CpuCoreCache { get; private set; } = new();
         
-        // 显卡硬件缓存 (用于快速定位)
+        // GPU hardware cache
         public IHardware? CachedGpu { get; private set; }
-        // 只有配置实际匹配到唯一显卡时才启用严格单卡刷新。
+        // Strict single-GPU refresh only when the settings match exactly one GPU.
         public bool HasExplicitGpuSelection { get; private set; }
-        // ★★★ [新增] 缓存总线传感器 (用于 Zen 5 频率修正) ★★★
+        // Bus speed sensor (for the Zen 5 clock correction)
         public ISensor? CpuBusSpeedSensor { get; private set; }
 
         private DateTime _lastMapBuild = DateTime.MinValue;
         
-        // ★★★ [优化 1] 移除了全系统传感器指纹相关字段 ★★★
         private readonly object _lock = new object();
         
-        // ★★★ [新增] 配置引用 ★★★
+        // Settings
         private Settings _cfg;
 
-        // [Fix] 回归 v1.2.9 的简单逻辑
-        // 只有在初始化时才需要 build，之后除非手动触发或 10 分钟兜底，否则不需要任何检测。
-        // 返回是否重建，便于取值服务同步传感器对象缓存。
+        // Simple rebuild rule:
+        // build once at start, then only when asked or by the 10-minute safety rebuild.
+        // Returns whether it rebuilt, so the value cache can follow.
         public bool EnsureFresh(Computer computer, Settings cfg)
         {
             if ((DateTime.Now - _lastMapBuild).TotalMinutes > 10)
@@ -63,7 +62,6 @@ namespace WinMonitor.Services
                 CachedGpu = null;
                 HasExplicitGpuSelection = false;
                 CpuBusSpeedSensor = null;
-                // _lastSensorFingerprint = 0; // 已移除
             }
         }
 
@@ -78,7 +76,7 @@ namespace WinMonitor.Services
         }
 
         /// <summary>
-        /// [新增] 获取内部映射的副本，用于 HardwareValueProvider 的静态化预热
+        /// A copy of the map (for HardwareValueProvider's cache)
         /// </summary>
         public Dictionary<string, ISensor> GetInternalMap()
         {
@@ -105,32 +103,32 @@ namespace WinMonitor.Services
         }
 
         // =======================================================================
-        // [核心] 构建传感器映射与缓存 (最复杂的构建逻辑)
+        // Builds the sensor map and caches
         // =======================================================================
-        public void Rebuild(Computer computer, Settings cfg) // ★ 签名修改
+        public void Rebuild(Computer computer, Settings cfg)
         {
             _cfg = cfg;
-            // 1. 准备临时容器 (线程安全)
-            var newMap = new Dictionary<string, ISensor>(StringComparer.OrdinalIgnoreCase); // 使用忽略大小写的比较器，减少字符串重复
+            // 1. New containers (swapped in at the end)
+            var newMap = new Dictionary<string, ISensor>(StringComparer.OrdinalIgnoreCase); // case-insensitive keys
             var newCpuCache = new List<CpuCoreSensors>();
             IHardware? newGpu = null;
-            ISensor? newBusSensor = null; // 临时变量
+            ISensor? newBusSensor = null; // temporary
             
-            // ★★★ [新增] 临时列表：用于智能匹配 ★★★
-            // 注意：这里不再在递归中直接处理风扇匹配，而是收集起来统一交给 ScanAndMapFans 处理
-            // 但为了保持原代码结构，我们依然用candidates收集主板相关数据
-            var candidatesMoboTemps = new List<ISensor>(capacity: 10); // 预设容量，减少扩容开销
+            // Candidates for smart matching
+            // (fans are matched later by FanMapper;
+            // motherboard temperatures are collected here)
+            var candidatesMoboTemps = new List<ISensor>(capacity: 10); // pre-sized
 
             string preferredGpu = cfg.PreferredGpu ?? "";
             IHardware? selectedGpu = HardwareScanner.FindGpuByConfig(computer, preferredGpu);
             bool shouldWarmGpuForMapping = cfg.IsAnyEnabled("GPU");
 
-            // 局部递归函数
+            // Recursive walk
             void RegisterTo(IHardware hw)
             {
                 bool isGpuHardware = HardwareScanner.IsGpuHardware(hw);
 
-                // 用户选择的显卡仍存在时只映射指定显卡；配置失效或旧名称无法唯一定位时回退自动优先级。
+                // A chosen GPU that still exists: map only that one; otherwise automatic priority.
                 if (isGpuHardware &&
                     selectedGpu != null &&
                     !ReferenceEquals(hw, selectedGpu))
@@ -143,23 +141,23 @@ namespace WinMonitor.Services
                     TryUpdateGpuForMapping(hw);
                 }
 
-                // --- 填充 CPU 缓存 (用于加权平均) ---
+                // --- CPU caches (weighted average) ---
                 if (hw.HardwareType == HardwareType.Cpu)
                 {
-                    // ★★★ [新增] 查找并缓存 Bus Speed 传感器 ★★★
-                    // 优先查找名为 "Bus Speed" 的时钟传感器
+                    // Bus speed sensor:
+                    // prefer the clock sensor named "Bus Speed"
                     if (newBusSensor == null)
                     {
                         newBusSensor = hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Clock && s.Name.Contains("Bus Speed"));
                     }
 
-                    // 查找所有核心频率 (排除总线频率)
+                    // All core clocks (not the bus)
                     var clocks = hw.Sensors.Where(s => s.SensorType == SensorType.Clock && Has(s.Name, "core") && !Has(s.Name, "bus"));
                     
                     foreach (var clock in clocks)
                     {
-                        // ★★★ 修复：AMD 负载叫 "CPU Core #1"，频率叫 "Core #1"，不相等。
-                        // 改用 EndsWith 匹配，既支持 Intel (名字一样) 也支持 AMD (带前缀)
+                        // AMD names the load "CPU Core #1" and the clock "Core #1":
+                        // EndsWith matches both Intel (same name) and AMD (prefix)
                         var load = hw.Sensors.FirstOrDefault(s => 
                             s.SensorType == SensorType.Load && 
                             s.Name.EndsWith(clock.Name, StringComparison.OrdinalIgnoreCase)); 
@@ -168,37 +166,36 @@ namespace WinMonitor.Services
                     }
                 }
 
-                // --- 填充 GPU 缓存 (优化版：完全依赖优先级排序) ---
+                // --- GPU cache (by priority) ---
                 if (isGpuHardware)
                 {
-                    // 因为外层循环已经按照 GetHwPriority 排序（强力显卡在前），
-                    // 所以第一个遇到的显卡就是最强的，直接锁定即可。
-                    // 移除了复杂的“后来者居上”判断逻辑，避免过度设计。
+                    // Hardware is visited strongest GPU first (GetHwPriority),
+                    // so the first GPU seen is the one to use.
                     if (newGpu == null)
                     {
                         newGpu = hw;
                     }
                     
-                    // ★★★ [新增] GPU 风扇映射 ★★★
+                    // GPU fan
                     var fan = hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Fan);
                     if (fan == null) fan = hw.Sensors.FirstOrDefault(s => s.SensorType == SensorType.Control);
                     if (fan != null) newMap.TryAdd("GPU.Fan", fan);
                 }
                 
-                // ★★★ [新增] 收集主板/SuperIO 传感器 ★★★
+                // Motherboard / SuperIO sensors
                 if (hw.HardwareType == HardwareType.Motherboard || hw.HardwareType == HardwareType.SuperIO)
                 {
                     foreach (var s in hw.Sensors)
                     {
-                        // 风扇数据由后续 ScanAndMapFans 全局扫描，这里只收集温度备用
+                        // (fans come from FanMapper; only temperatures here)
                         if (s.SensorType == SensorType.Temperature) candidatesMoboTemps.Add(s);
                     }
                 }
 
-                // --- 普通传感器映射 ---
+                // --- Other sensors ---
                 foreach (var s in hw.Sensors)
                 {
-                    string? key = SensorMatcher.Match(hw, s); // 调用 SensorMatcher 进行识别
+                    string? key = SensorMatcher.Match(hw, s); // SensorMatcher works out the key
                     if (!string.IsNullOrEmpty(key))
                     {
                         if (!newMap.ContainsKey(key))
@@ -207,29 +204,28 @@ namespace WinMonitor.Services
                         }
                         else
                         {
-                            // [Fix] 冲突解决策略：优先选择 Vendor (非 D3D) 传感器
-                            // 必须严格保护高优先级显卡的数据，防止被低优先级显卡覆盖！
+                            // Conflicts: prefer vendor sensors over D3D ones,
+                            // and never let a weaker GPU overwrite a stronger one.
                             var existing = newMap[key];
                             
-                            // 1. 如果现有数据来自"更强"的显卡 (Priority数值更小)，绝对禁止覆盖！
-                            // (注意：RegisterTo 按照 0->100 顺序遍历，所以 existing 的优先级只可能 <= 当前 hw 的优先级)
-                            // 如果 existing < hw，说明它是更强的显卡写入的，直接跳过。
+                            // 1. Existing value from a stronger GPU (lower priority number): keep it.
+                            // (Visited in priority order, so existing is never weaker than this one.)
                             if (HardwareRules.GetHwPriority(existing.Hardware) < HardwareRules.GetHwPriority(hw))
                             {
                                 continue;
                             }
 
-                            // 2. 如果优先级相同 (通常是同一张显卡的不同传感器，或者是两张同样的显卡)，
-                            // 则应用 D3D vs Vendor 优选逻辑。
+                            // 2. Same priority (same card, or two identical cards):
+                            // prefer vendor over D3D.
                             bool existingIsD3D = existing.Name.Contains("D3D", StringComparison.OrdinalIgnoreCase);
                             bool newIsD3D = s.Name.Contains("D3D", StringComparison.OrdinalIgnoreCase);
                             
-                            // 如果现有的是 D3D 而新来的不是 D3D -> 替换为新来的 (Upgrade)
+                            // Existing is D3D and the new one is not: replace
                             if (existingIsD3D && !newIsD3D)
                             {
                                 newMap[key] = s;
                             }
-                            // 其他情况 (Vendor vs Vendor, Vendor vs D3D) -> 保持现有 (First Wins / Vendor Wins)
+                            // Otherwise keep the existing one (first / vendor wins)
                         }
                     }
                 }
@@ -237,30 +233,30 @@ namespace WinMonitor.Services
                 foreach (var sub in hw.SubHardware) RegisterTo(sub);
             }
 
-            // 按优先级排序并注册
+            // Register in priority order
             var ordered = computer.Hardware.OrderBy(h => HardwareRules.GetHwPriority(h));
             foreach (var hw in ordered) RegisterTo(hw);
             
             // ============================================
-            // ★★★ [新增] 智能匹配逻辑 ★★★
+            // Smart matching
             // ============================================
             
-            // A. 主板温度 (策略：System > Motherboard > Chipset > MaxValue)
+            // A. Motherboard temperature (System > Motherboard > Chipset > highest)
             if (!newMap.ContainsKey("MOBO.Temp") && candidatesMoboTemps.Count > 0)
             {
-                // 1. 优先匹配标准名称 (System, Motherboard)
+                // 1. Standard names (System, Motherboard)
                 var best = candidatesMoboTemps.FirstOrDefault(x => Has(x.Name, "System"));
                 if (best == null) best = candidatesMoboTemps.FirstOrDefault(x => Has(x.Name, "Motherboard"));
                 
-                // 2. 其次匹配芯片组 (Chipset)
+                // 2. Chipset
                 if (best == null) best = candidatesMoboTemps.FirstOrDefault(x => Has(x.Name, "Chipset") || Has(x.Name, "PCH"));
                 
-                // 3. 兜底策略：找有效值中最大的 (假设热点即关键点，且排除 0 和 200+ 异常值)
+                // 3. Fallback: the highest valid value (no 0 or 200+ readings)
                 if (best == null)
                 {
-                    // ★★★ 优化策略：优先寻找"合理范围"(15-68度)内的最大值，这通常是 System/Motherboard 温度 ★★★
-                    // 只有当找不到合理值时，才去寻找更宽范围(0-95度)的最大值(可能是 VRM 或 Chipset)
-                    // 修复：用户反馈 Asus Z790 主板 Temperature #5 经常跳到 100+，导致误报。
+                    // Prefer the highest value in a plausible range (15-68 °C), usually the system temperature;
+                    // only without one, the highest in 0-95 °C (maybe VRM or chipset).
+                    // (Some boards, e.g. Asus Z790, report a Temperature #5 that jumps above 100.)
                     
                     ISensor? bestSafe = null;
                     float maxSafe = -999f;
@@ -273,15 +269,15 @@ namespace WinMonitor.Services
                         if (!t.Value.HasValue) continue;
                         float v = t.Value.Value;
                         
-                        // 1. 收集宽范围 (0 - 95)，严格过滤掉 >95 的异常值/虚假值 (原逻辑是 110，太宽了)
+                        // 1. Wide range (0 - 95), anything above 95 is ignored
                         if (v > 0 && v < 95 && v > maxFallback)
                         {
                             maxFallback = v;
                             bestFallback = t;
                         }
                         
-                        // 2. 收集合理范围 (15 - 68)
-                        // 68度通常是主板/系统温度的合理上限，超过这个值可能是 Chipset 或 VRM
+                        // 2. Plausible range (15 - 68)
+                        // 68 °C is about the limit for board / system sensors; above it is likely chipset or VRM
                         if (v >= 15 && v <= 68 && v > maxSafe)
                         {
                             maxSafe = v;
@@ -289,14 +285,14 @@ namespace WinMonitor.Services
                         }
                     }
                     
-                    // 优先使用合理范围的传感器
+                    // Plausible range first
                     best = bestSafe ?? bestFallback;
                 }
                 
                 if (best != null) newMap["MOBO.Temp"] = best;
             }
 
-            // B. 风扇匹配只在确实显示风扇/水泵时运行，避免启动阶段无意义地刷新主板控制器。
+            // B. Fans: matched only when fan / pump items are shown (no needless controller scans at startup).
             if (cfg.IsAnyEnabled("CPU.Fan") ||
                 cfg.IsAnyEnabled("CPU.Pump") ||
                 cfg.IsAnyEnabled("CASE.Fan"))
@@ -304,7 +300,7 @@ namespace WinMonitor.Services
                 _fanMapper.ScanAndMapFans(computer, cfg, newMap);
             }
 
-            // 2. 原子交换数据 (加锁)
+            // 2. Swap the data in (locked)
             lock (_lock)
             {
                 _map.Clear();
@@ -313,14 +309,13 @@ namespace WinMonitor.Services
                 CpuCoreCache = newCpuCache;
                 CachedGpu = newGpu;
                 HasExplicitGpuSelection = selectedGpu != null;
-                CpuBusSpeedSensor = newBusSensor; // ★ 更新 Bus Sensor 缓存
+                CpuBusSpeedSensor = newBusSensor; // bus sensor
                 
                 _lastMapBuild = DateTime.Now;
-                // ★★★ [优化 3] 指纹记录已移除 ★★★
             }
         }
 
-        // 复用 HardwareRules 的字符串匹配，避免重复造轮子
+        // Shared string matching (HardwareRules)
         public static bool Has(string source, string sub) => HardwareRules.Has(source, sub);
 
         private static void TryUpdateGpuForMapping(IHardware hw)
@@ -331,7 +326,7 @@ namespace WinMonitor.Services
             }
             catch
             {
-                // 显卡 Update 失败时保持旧映射逻辑，避免建图阶段影响其他硬件数据。
+                // A failed GPU update keeps the old mapping, so the other hardware is not affected.
             }
         }
     }

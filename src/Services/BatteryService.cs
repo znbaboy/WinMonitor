@@ -6,45 +6,44 @@ using WinMonitor.Core;
 namespace WinMonitor.Services
 {
     /// <summary>
-    /// 电池服务：专门处理电池状态识别、数值计算及模拟测试逻辑
+    /// Laptop battery values (and a simulation for testing the UI)
     /// </summary>
     public static class BatteryService
     {
         /// <summary>
-        /// 获取电池相关数值
+        /// Battery value for a key
         /// </summary>
         public static float? GetBatteryValue(string key, Dictionary<string, ISensor> sensorCache)
         {
-            // 1. 模拟模式逻辑 (用于 UI 测试)
-            bool simulateBattery = false; // 默认关闭，可根据需要开启
+            // 1. Simulation (UI testing)
+            bool simulateBattery = false; // off by default
             if (simulateBattery)
             {
                 return GetSimulatedValue(key);
             }
 
-            // 2. 真实硬件逻辑
+            // 2. Real hardware
             if (sensorCache.TryGetValue(key, out var sensor) && sensor.Value.HasValue)
             {
                 float val = sensor.Value.Value;
 
-                // 符号修正：充电时功耗/电流应为正号，放电时为负号
+                // Sign: positive while charging, negative while discharging
                 if (key == "BAT.Power" || key == "BAT.Current")
                 {
                     var powerStatus = MetricUtils.GetPowerStatus();
                     
-                    // [Fix] 简化且强制的符号修正逻辑
-                    // 无论传感器原始值是正还是负（不同驱动标准不一），
-                    // 我们只根据"是否插电"来强制赋予符号。
+                    // Drivers disagree on the sign,
+                    // so it is set from the power state alone:
                     
                     if (powerStatus.AcOnline)
                     {
-                        // 插电状态 (AcOnline=true) -> 视为输入/充电 -> 正数
+                        // On AC power -> charging -> positive
                         val = Math.Abs(val);
                     }
                     else
                     {
-                        // 电池供电状态 (AcOnline=false) -> 视为输出/放电 -> 负数
-                        // ★ 强制取负绝对值，确保一定是负数
+                        // On battery -> discharging -> negative
+                        // always negative
                         val = -Math.Abs(val);
                         
 
@@ -61,7 +60,7 @@ namespace WinMonitor.Services
             var now = DateTime.Now;
             int sec = now.Second;
 
-            // 前 30 秒：模拟 [高负载放电]，后 30 秒：模拟 [快充]
+            // First 30 s: heavy discharge, next 30 s: fast charge
             bool isCharging = sec >= 30;
             
             float voltage = isCharging 

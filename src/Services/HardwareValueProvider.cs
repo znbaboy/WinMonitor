@@ -18,20 +18,20 @@ namespace WinMonitor.Services
         private readonly object _lock;
         private readonly Dictionary<string, float> _lastValidMap; 
         
-        // 子服务与处理器
+        // Helpers
         private readonly PerformanceCounterManager _perfManager;
         private readonly ComponentProcessor _componentProcessor;
 
-        // Tick 级智能缓存 (防止同帧重复计算)
+        // Per-tick cache (no repeat work within one update)
         private readonly Dictionary<string, float> _tickCache = new();
 
-        // 对象级缓存：(Sensor对象)
+        // Sensor object cache
         private Dictionary<string, ISensor> _manualSensorCache = new();
 
         private const float AutoMoboTempHardMax = 95f;
         private const float ManualMoboTempHardMax = 125f;
 
-        // 配置版本追踪，用于自动触发预热
+        // Settings version (re-warms the caches when it changes)
         private string _lastPrefCpuFan = "";
         private string _lastPrefCpuPump = "";
         private string _lastPrefCaseFan = "";
@@ -51,16 +51,16 @@ namespace WinMonitor.Services
             _lock = syncLock;
             _lastValidMap = lastValid;
 
-            // 初始化子服务
+            // Helpers
             _componentProcessor = new ComponentProcessor(c, s, map);
         }
 
-        // ★★★ [新增] 清空缓存并重新预热（当硬件重载或配置变更时调用） ★★★
+        // Clear and re-warm the caches (after a hardware reload or settings change)
         public void PreCacheAllSensors(SensorMap map)
         {
             var newCache = map.GetInternalMap();
 
-            // 记录当前预热的配置版本
+            // Remember which settings were warmed
             _lastPrefCpuFan = _cfg.PreferredCpuFan;
             _lastPrefCpuPump = _cfg.PreferredCpuPump;
             _lastPrefCaseFan = _cfg.PreferredCaseFan;
@@ -69,7 +69,7 @@ namespace WinMonitor.Services
             _lastPrefNet = _cfg.PreferredNetwork;
             _lastPrefGpu = _cfg.PreferredGpu ?? "";
 
-            // 1. 预查找用户指定的首选传感器 (风扇、水泵、主板温度)
+            // 1. The user's preferred sensors (fans, pump, motherboard temperature)
             string[] preferredKeys = { "CPU.Fan", "CPU.Pump", "CASE.Fan", "MOBO.Temp" };
             foreach (var key in preferredKeys)
             {
@@ -79,6 +79,7 @@ namespace WinMonitor.Services
 
                 SensorType type = (key == "MOBO.Temp") ? SensorType.Temperature : SensorType.Fan;
 
+                // "自动" is "Auto" in settings saved by the Chinese LiteMonitor
                 if (!string.IsNullOrEmpty(pref) && !pref.Contains("自动") && !pref.Contains("Auto"))
                 {
                     var s = FindSensorReverse(pref, type);
@@ -86,7 +87,7 @@ namespace WinMonitor.Services
                 }
             }
 
-            // 2. 预查找首选磁盘 (DISK.*)
+            // 2. Preferred disk (DISK.*)
             if (!string.IsNullOrEmpty(_lastPrefDisk))
             {
                 var disk = _computer.Hardware.FirstOrDefault(h => h.HardwareType == HardwareType.Storage && h.Name.Equals(_lastPrefDisk, StringComparison.OrdinalIgnoreCase));
@@ -101,13 +102,13 @@ namespace WinMonitor.Services
                         }
                     }
                     
-                    // 独立处理温度筛选逻辑 (复用 DiskManager 算法)
+                    // Temperature selection (same rules as DiskManager)
                     var bestTemp = DiskManager.FindBestTempSensor(disk);
                     if (bestTemp != null) newCache["DISK.Temp"] = bestTemp;
                 }
             }
 
-            // 3. 预查找首选网络 (NET.*)
+            // 3. Preferred network adapter (NET.*)
             if (!string.IsNullOrEmpty(_lastPrefNet))
             {
                 var net = _computer.Hardware.FirstOrDefault(h => h.HardwareType == HardwareType.Network && h.Name.Equals(_lastPrefNet, StringComparison.OrdinalIgnoreCase));
@@ -124,7 +125,7 @@ namespace WinMonitor.Services
                 }
             }
 
-            // 4. 原子更新缓存
+            // 4. Swap the cache in
             lock (_lock)
             {
                 _manualSensorCache = newCache;
@@ -134,7 +135,7 @@ namespace WinMonitor.Services
         }
 
         /// <summary>
-        /// 极速反向查找：解析保存的字符串（格式：SensorName [HardwareName]）并定位到 ISensor 对象
+        /// Finds the sensor for a saved "SensorName [HardwareName]" string
         /// </summary>
         private ISensor? FindSensorReverse(string savedString, SensorType type)
         {
@@ -183,7 +184,7 @@ namespace WinMonitor.Services
         }
 
         /// <summary>
-        /// 每一轮更新开始时的准备工作（清空帧缓存、检查配置变更、更新电源状态）
+        /// Start of each update: clear the tick cache, check settings changes, update the power state
         /// </summary>
         public void OnUpdateTickStarted()
         {
@@ -197,7 +198,7 @@ namespace WinMonitor.Services
                     _sensorMap.Rebuild(_computer, _cfg);
                 }
 
-                // 自动检测配置变更：如果用户更改了首选风扇/磁盘/显卡，立即自动预热
+                // A changed preferred fan / disk / GPU re-warms the caches straight away
                 if (gpuChanged ||
                     _lastPrefCpuFan != _cfg.PreferredCpuFan ||
                     _lastPrefCpuPump != _cfg.PreferredCpuPump ||
@@ -213,7 +214,7 @@ namespace WinMonitor.Services
 
 
         // ===========================================================
-        // ===================== 公共取值入口 =========================
+        // ===================== Reading values =========================
         // ===========================================================
         public float? GetStartupValue(string key)
         {
@@ -256,36 +257,34 @@ namespace WinMonitor.Services
 
         public float? GetValue(string key)
         {
-            // ★★★ [优化] 使用 TryEnter 避免 UI 线程因后台重载而卡死 ★★★
-            // 如果 10ms 内拿不到锁（说明正在重载硬件），直接返回 null
+            // TryEnter, so the UI never waits on a background reload:
+            // no lock within 10 ms (hardware reloading) -> no fresh value
             bool lockTaken = false;
             try
             {
                 Monitor.TryEnter(_lock, 10, ref lockTaken);
                 if (!lockTaken) 
                 {
-                    // ★★★ [Fix] 如果无法获取锁（硬件正在重载），优先返回上一帧的有效值，防止 UI 闪烁 ★★★
-                    // 因为 _lastValidMap 仅在 GetValue 内部（即 UI 线程）写入，
-                    // 而后台线程（UpdateAll/Reload）只读不写或完全不访问它，
-                    // 所以此时读取是安全的（虽然没有锁，但没有并发写入）。
+                    // Lock busy (reloading): return the last good value so the panel does not flicker.
+                    // _lastValidMap is only written here (UI thread) and never by the background thread,
+                    // so reading it without the lock is safe.
                     if (_lastValidMap.TryGetValue(key, out float lastVal)) return lastVal;
                     return null;
                 }
 
-                // ★★★ [新增 3] 优先查缓存，如果本帧算过，直接返回 ★★★
+                // Already worked out this tick: return it
                 if (_tickCache.TryGetValue(key, out float cachedVal)) return cachedVal;
 
 
 
-                // 定义临时结果变量
+                // Result
                 float? result = null;
                 bool skipGenericFallback = false;
                 
-                // ★★★ [核心逻辑] 全局开关判断：只有当开关开启，且管理器已初始化成功时，才尝试走计数器 ★★★
-                // 这里的 UseWindowsPerformanceCounters 对应 Step 1 中 Settings 新增的属性
+                // Use performance counters only when switched on and ready
                 bool useCounter = _cfg.UseWinPerCounters && _perfManager.IsInitialized;
 
-                // ★★★ [终极优化] 使用 switch 替代 if-else 链，实现 O(1) 哈希跳转 ★★★
+                // switch for a direct jump
                 switch (key)
                 {
                     // 1. CPU.Load
@@ -298,14 +297,14 @@ namespace WinMonitor.Services
 
                         if (result == null)
                         {
-                            // [Fix] 优先使用 LHM 的 "Total" 聚合传感器（与任务管理器一致）
-                            // 然后才回退到各核心平均值计算
+                            // Prefer LibreHardwareMonitor's "Total" sensor (matches Task Manager)
+                            // before averaging the cores
                             if (_manualSensorCache.TryGetValue("CPU.Load", out var totalSensor) && totalSensor.Value.HasValue)
                             {
                                 result = totalSensor.Value.Value;
                             }
 
-                            // 如果 Total 传感器不可用，才回退到核心平均值
+                            // No Total sensor: average the cores
                             if (result == null)
                             {
                                 result = _componentProcessor.GetCpuLoad();
@@ -325,7 +324,7 @@ namespace WinMonitor.Services
                         if (result == null) result = 0f;
                         break;
 
-                    // 4. 每日流量
+                    // 4. Daily traffic
                     case "DATA.DayUp":
                         result = TrafficLogger.GetTodayStats().up;
                         break;
@@ -333,7 +332,7 @@ namespace WinMonitor.Services
                         result = TrafficLogger.GetTodayStats().down;
                         break;
 
-                    // 6. 内存
+                    // 6. Memory
                     case "MEM.Load":
                         if (useCounter)
                         {
@@ -350,32 +349,32 @@ namespace WinMonitor.Services
 
                         if (result == null)
                         {
-                            // 1. 尝试获取基础数据 (Used, Available)
-                            // 这是最可靠的数据源，既能算出负载，也能初始化总容量
+                            // 1. Used and Available
+                            // (the most reliable: gives the load and the total size)
                             float? usedVal = null;
                             float? availVal = null;
                             if (_manualSensorCache.TryGetValue("MEM.Used", out var u) && u.Value.HasValue) usedVal = u.Value.Value;
                             if (_manualSensorCache.TryGetValue("MEM.Available", out var a) && a.Value.HasValue) availVal = a.Value.Value;
 
-                            // 2. 优先通过计算获取结果 (Used / (Used + Available))
-                            // 这种方式能同时确保 Load 百分比和 Total 容量都被正确处理，避免"有负载没容量"的问题
+                            // 2. Load = Used / (Used + Available)
+                            // (sets both the percentage and the total, never one without the other)
                             if (usedVal.HasValue && availVal.HasValue)
                             {
                                 float memTotal = usedVal.Value + availVal.Value;
                                 if (memTotal > 0)
                                 {
-                                    // 初始化总容量 (供容量显示模式使用)
+                                    // Total size (for size display mode)
                                     if (Settings.DetectedRamTotalGB <= 0)
                                     {
                                         Settings.DetectedRamTotalGB = memTotal > 512.0f ? memTotal / 1024.0f : memTotal;
                                     }
 
-                                    // 计算负载百分比
+                                    // Load percentage
                                     result = (usedVal.Value / memTotal) * 100.0f;
                                 }
                             }
 
-                            // 3. 兜底：如果无法计算 (缺 Used/Available)，才尝试读取原生 Load 传感器
+                            // 3. Fallback: the native Load sensor
                             if (result == null && _manualSensorCache.TryGetValue("MEM.Load", out var sLoad) && sLoad.Value.HasValue)
                             {
                                 result = sLoad.Value.Value;
@@ -387,7 +386,7 @@ namespace WinMonitor.Services
                         }
                         break;
 
-                    // 7. 显存
+                    // 7. Video memory
                     case "GPU.VRAM":
                         float? used = GetValue("GPU.VRAM.Used");
                         float? total = GetValue("GPU.VRAM.Total");
@@ -403,7 +402,7 @@ namespace WinMonitor.Services
                         }
                         break;
 
-                    // 8. 风扇/泵 (带 Max 记录)
+                    // 8. Fans / pump (records maximums)
                     case "CPU.Fan":
                     case "CPU.Pump":
                     case "CASE.Fan":
@@ -421,7 +420,7 @@ namespace WinMonitor.Services
                             _cfg.UpdateMaxRecord(key, result.Value);
                         break;
 
-                    // 主板温度
+                    // Motherboard temperature
                     case "MOBO.Temp":
                         skipGenericFallback = true;
                         if (_manualSensorCache.TryGetValue(key, out var sMobo))
@@ -430,7 +429,7 @@ namespace WinMonitor.Services
                         }
                         break;
 
-                    // 电池
+                    // Battery
                     case "BAT.Percent":
                     case "BAT.Power":
                     case "BAT.Voltage":
@@ -438,7 +437,7 @@ namespace WinMonitor.Services
                         result = BatteryService.GetBatteryValue(key, _manualSensorCache);
                         break;
 
-                    // 默认分支：处理模糊匹配 (StartsWith/Contains)
+                    // Default: prefix / contains matching
                     default:
                         if (key.StartsWith("NET"))
                         {
@@ -491,8 +490,8 @@ namespace WinMonitor.Services
                         break;
                 }
 
-                // 10. 通用传感器查找 (兜底)
-                // ★★★ [优化] 移除锁和 _sensorMap 查找，直接查静态缓存 ★★★
+                // 10. Generic sensor lookup (fallback)
+                // straight from the cache (no lock)
                 if (!skipGenericFallback && result == null && _manualSensorCache.TryGetValue(key, out var sGen))
                 {
                     var val = sGen.Value;
@@ -507,7 +506,7 @@ namespace WinMonitor.Services
                     }
                 }
 
-                // ★★★ [新增 4] 写入缓存并返回 ★★★
+                // Cache and return
                 if (result.HasValue)
                 {
                     _tickCache[key] = result.Value;

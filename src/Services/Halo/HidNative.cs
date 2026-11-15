@@ -1,4 +1,4 @@
-// Built-in Halo Battery support for LiteMonitor.
+// Built-in Halo Battery support for WinMonitor.
 // Device protocols ported from Halo Battery (https://github.com/HeyOkay/HaloBattery),
 // MIT License, Copyright (c) 2026 Halo Battery contributors.
 using System;

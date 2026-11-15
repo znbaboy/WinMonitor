@@ -3,14 +3,14 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Text.Json; // 如果报错，请引用 System.Text.Json NuGet包，或改用 Newtonsoft
+using System.Text.Json;
 
 namespace WinMonitor.Core
 {
-    // === 数据模型 ===
+    // === Data ===
     public class TrafficData
     {
-        // Key格式: "2023-10-27"
+        // Key format: "2023-10-27"
         public Dictionary<string, DailyRecord> History { get; set; } = new Dictionary<string, DailyRecord>();
     }
 
@@ -20,21 +20,21 @@ namespace WinMonitor.Core
         public long Download { get; set; }
     }
 
-    // === 管理器 (静态单例) ===
+    // === Store (static) ===
     public static class TrafficLogger
     {
         private static readonly string _filePath = Path.Combine(AppContext.BaseDirectory, "TrafficHistory.json");
         private static readonly string _backupPath = Path.Combine(AppContext.BaseDirectory, "TrafficHistory.json.bak");
         private static readonly string _tempPath = Path.Combine(AppContext.BaseDirectory, "TrafficHistory.json.tmp");
-        private static readonly object _ioLock = new object(); // 文件锁
-        private static readonly object _dataLock = new object(); // 数据锁
-        // ====== 新增缓存字段 ======
+        private static readonly object _ioLock = new object(); // file lock
+        private static readonly object _dataLock = new object(); // data lock
+        // Cached values
         private static DateTime _cachedDate;
         private static string _cachedDateKey = "";
 
         public static TrafficData Data { get; private set; } = new TrafficData();
 
-        // 启动时加载
+        // Load at startup
         public static void Load()
         {
             lock (_ioLock)
@@ -59,7 +59,7 @@ namespace WinMonitor.Core
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[TrafficLogger] 读取历史流量失败: {path}, {ex.Message}");
+                Debug.WriteLine($"[TrafficLogger] could not read the traffic history: {path}, {ex.Message}");
                 return null;
             }
         }
@@ -90,7 +90,7 @@ namespace WinMonitor.Core
             if (File.Exists(_filePath))
             {
                 try { File.Copy(_filePath, _backupPath, true); }
-                catch (Exception ex) { Debug.WriteLine($"[TrafficLogger] 写入备份失败: {ex.Message}"); }
+                catch (Exception ex) { Debug.WriteLine($"[TrafficLogger] could not write the backup: {ex.Message}"); }
             }
 
             File.Move(_tempPath, _filePath, true);
@@ -104,7 +104,7 @@ namespace WinMonitor.Core
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[TrafficLogger] 清理临时文件失败: {ex.Message}");
+                Debug.WriteLine($"[TrafficLogger] could not remove the temporary file: {ex.Message}");
             }
         }
 
@@ -149,19 +149,19 @@ namespace WinMonitor.Core
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"[TrafficLogger] 保存历史流量失败: {ex.Message}");
+                    Debug.WriteLine($"[TrafficLogger] could not save the traffic history: {ex.Message}");
                     CleanupTempFile();
                 }
             }
         }
 
-        // 关闭时保存
+        // Save on exit
         public static void Save()
         {
             SaveInternal();
         }
 
-        // 核心：累加数据
+        // Add traffic
         public static void AddTraffic(long upBytes, long downBytes)
         {
             string key = GetTodayKey();
@@ -174,7 +174,7 @@ namespace WinMonitor.Core
             }
         }
 
-        // 获取今日数据 (供 UI 显示)
+        // Today's totals (for the panel)
         public static (long up, long down) GetTodayStats()
         {
             string key = GetTodayKey();
@@ -189,7 +189,7 @@ namespace WinMonitor.Core
             return (0, 0);
         }
 
-        // [新增] 删除指定日期的记录
+        // Deletes one day
         public static void RemoveRecord(string dateKey)
         {
             bool changed;
@@ -199,10 +199,10 @@ namespace WinMonitor.Core
                 changed = Data.History.Remove(dateKey);
             }
 
-            if (changed) Save(); // 立即保存更改
+            if (changed) Save(); // save straight away
         }
 
-        // [新增] 清空所有历史
+        // Deletes all history
         public static void ClearHistory()
         {
             lock (_dataLock)

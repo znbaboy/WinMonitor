@@ -40,15 +40,15 @@ namespace WinMonitor
             else
             {
                 // 2. Add monitor items introduced since this config was saved
-                // [Cleanup] the rebuild for configs older than 1.2 (no taskbar order) was removed
+                // (configs older than LiteMonitor 1.2 are not rebuilt)
                 s.CheckAndAppendMissingItems();
             }
 
-            // [Fix] Removed redundant SyncToLanguage call. 
+            // Removed redundant SyncToLanguage call. 
             // Caller (AppActions.ApplyAllSettings) is responsible for syncing language state.
             // s.SyncToLanguage();
             
-            // [Cleanup] actions 3 (traffic history) and 5 (web display) no longer exist
+            // actions 3 (traffic history) and 5 (web display) no longer exist
             if (s.MainFormDoubleClickAction is not (1 or 2 or 5)) s.MainFormDoubleClickAction = 2;   // removed actions open Settings
             if (s.Skin == "Dark") s.Skin = ThemeManager.DarkDefault;                              // build 4 settings
             else if (s.Skin == "Light") s.Skin = ThemeManager.LightDefault;
@@ -141,31 +141,31 @@ namespace WinMonitor
         {
             settings.MonitorItems = new List<MonitorItemConfig>
             {
-                // [1xx] Dashboard Items
-                // [Taskbar] DASH items should appear at the END by default (SortIndex > 800)
+                // Dashboard Items
+                // Dashboard items go to the end by default (SortIndex > 800)
                 new MonitorItemConfig { Key = "DASH.HOST", SortIndex = 101, VisibleInPanel = false, TaskbarLabel = " " },
                 new MonitorItemConfig { Key = "DASH.Time", SortIndex = 102, VisibleInPanel = false, TaskbarLabel = " " },
                 new MonitorItemConfig { Key = "DASH.Uptime", SortIndex = 103, VisibleInPanel = true, TaskbarLabel = " " },
                 new MonitorItemConfig { Key = "DASH.IP",   SortIndex = 104, VisibleInPanel = false, TaskbarLabel = " " },
 
-                // [Halo] wireless device batteries, one row per device type
+                // wireless device batteries, one row per device type
                 new MonitorItemConfig { Key = "HALO.Mouse",      SortIndex = 151, VisibleInPanel = true },
                 new MonitorItemConfig { Key = "HALO.Keyboard",   SortIndex = 152, VisibleInPanel = true },
                 new MonitorItemConfig { Key = "HALO.Headset",    SortIndex = 153, VisibleInPanel = false },
                 new MonitorItemConfig { Key = "HALO.Controller", SortIndex = 154, VisibleInPanel = true },
                 new MonitorItemConfig { Key = "HALO.Bluetooth",  SortIndex = 155, VisibleInPanel = false },
                
-                // [2xx] CPU
+                // CPU
                 new MonitorItemConfig { Key = "CPU.Load",  SortIndex = 201, VisibleInPanel = true },
                 new MonitorItemConfig { Key = "CPU.Temp",  SortIndex = 202, VisibleInPanel = true },
                 new MonitorItemConfig { Key = "CPU.Clock", SortIndex = 203, VisibleInPanel = false },
                 new MonitorItemConfig { Key = "CPU.Power", SortIndex = 204, VisibleInPanel = false },
-                // [New] CPU Voltage
+                // CPU Voltage
                 new MonitorItemConfig { Key = "CPU.Voltage", SortIndex = 205, VisibleInPanel = false },
                 new MonitorItemConfig { Key = "CPU.Fan",   SortIndex = 206, VisibleInPanel = false },
                 new MonitorItemConfig { Key = "CPU.Pump",  SortIndex = 207, VisibleInPanel = false },
 
-                // [3xx] GPU
+                // GPU
                 new MonitorItemConfig { Key = "GPU.Load",  SortIndex = 301, VisibleInPanel = true },
                 new MonitorItemConfig { Key = "GPU.Temp",  SortIndex = 302, VisibleInPanel = true },
                 new MonitorItemConfig { Key = "GPU.Clock", SortIndex = 303, VisibleInPanel = false },
@@ -173,34 +173,33 @@ namespace WinMonitor
                 new MonitorItemConfig { Key = "GPU.Fan",   SortIndex = 305, VisibleInPanel = false },
                 new MonitorItemConfig { Key = "GPU.VRAM",  SortIndex = 306, VisibleInPanel = true },
 
-                // [4xx] HOST (MEM, MOBO, DISK Temp, CASE Fan)
+                // HOST (MEM, MOBO, DISK Temp, CASE Fan)
                 new MonitorItemConfig { Key = "MEM.Load",  SortIndex = 401, VisibleInPanel = true },
                 new MonitorItemConfig { Key = "MOBO.Temp", SortIndex = 403, VisibleInPanel = false },
                 new MonitorItemConfig { Key = "DISK.Temp", SortIndex = 404, VisibleInPanel = false },
                 new MonitorItemConfig { Key = "CASE.Fan",  SortIndex = 405, VisibleInPanel = false },
                 
-                // [5xx] BATTERY (New Group)
+                // BATTERY (New Group)
                 new MonitorItemConfig { Key = "BAT.Percent", SortIndex = 501, VisibleInPanel = false },
                 new MonitorItemConfig { Key = "BAT.Power",   SortIndex = 502, VisibleInPanel = false },
                 new MonitorItemConfig { Key = "BAT.Voltage", SortIndex = 503, VisibleInPanel = false },
                 new MonitorItemConfig { Key = "BAT.Current", SortIndex = 504, VisibleInPanel = false },
 
-                // [6xx] DISK IO
+                // DISK IO
                 new MonitorItemConfig { Key = "DISK.Read", SortIndex = 601, VisibleInPanel = true },
                 new MonitorItemConfig { Key = "DISK.Write",SortIndex = 602, VisibleInPanel = true },
 
-                // [7xx] NET
+                // NET
                 new MonitorItemConfig { Key = "NET.Up",    SortIndex = 701, VisibleInPanel = true },
                 new MonitorItemConfig { Key = "NET.Down",  SortIndex = 702, VisibleInPanel = true },
 
-                // [8xx] DATA
+                // DATA
                 new MonitorItemConfig { Key = "DATA.DayUp",  SortIndex = 801, VisibleInPanel = true },
                 new MonitorItemConfig { Key = "DATA.DayDown",SortIndex = 802, VisibleInPanel = true },
             };
         }
-        // [Sync] 同步到语言设置
-        // 作用：将配置中的组别名和监控项标签同步到语言管理器
-        // 注意：这会清除所有当前的语言覆盖
+        // Push renamed groups and items to the language manager
+        // (clears all current overrides first)
         public static void SyncToLanguage(this Settings settings)
         {
             LanguageManager.ClearOverrides();
@@ -235,7 +234,7 @@ namespace WinMonitor
         {
             if (settings.MonitorItems != null)
             {
-                // [Cleanup] Remove Orphaned Items
+                // Remove Orphaned Items
                 // Optimization: Use StandardKeys whitelist to avoid heavy allocations
                 var whitelist = GetStandardKeys();
                 var keysToRemove = new List<MonitorItemConfig>();
@@ -249,11 +248,11 @@ namespace WinMonitor
                     // 1. Is it a standard item?
                     if (whitelist.Contains(item.Key)) continue;
 
-                    // 2. Is it a valid Plugin item? 
-                    // [Safety] 只要是 DASH. 开头，一律保留，防止误删用户自定义的简单插件
+                    // 2. A dashboard item? 
+                    // Keep every DASH.* item
                     if (item.Key.StartsWith("DASH.", StringComparison.OrdinalIgnoreCase))
                     {
-                        continue; // 保留所有 DASH.*
+                        continue; // keep all DASH.*
                     }
                     keysToRemove.Add(item);
                 }
@@ -283,7 +282,7 @@ namespace WinMonitor
             temp.InitDefaultItems();
             var defaultList = temp.MonitorItems;
             
-            // 找出缺失项 (保持 DefaultList 的相对顺序)
+            // Find missing items (in default-list order)
             var newItems = defaultList
                 .Where(std => !settings.MonitorItems.Any(usr => usr.Key.Equals(std.Key, StringComparison.OrdinalIgnoreCase)))
                 .ToList();
@@ -294,14 +293,14 @@ namespace WinMonitor
 
             foreach (var newItem in newItems)
             {
-                // [智能锚点逻辑]
-                // 不使用硬编码的 SortIndex，而是寻找该项在 DefaultList 中的"前一个邻居" (Anchor)
-                // 如果用户把邻居移到了别处，新项会紧随其后。
+                // Placement by neighbour:
+                // Place a new item after its nearest neighbour in the default list (not at a fixed index),
+                // so it follows wherever the user moved that neighbour.
                 
                 MonitorItemConfig? anchor = null;
                 int myDefIdx = defaultList.FindIndex(x => x.Key == newItem.Key);
                 
-                // 往前回溯寻找最近的有效锚点
+                // Walk back to the nearest existing neighbour
                 for (int k = myDefIdx - 1; k >= 0; k--)
                 {
                     var prevKey = defaultList[k].Key;
@@ -321,12 +320,12 @@ namespace WinMonitor
                 }
                 else
                 {
-                    // 没锚点 (说明是队首)，插在当前最小值前面
+                    // No neighbour (first item): insert before the current first
                     int min = settings.MonitorItems.Count > 0 ? settings.MonitorItems.Min(x => x.SortIndex) : 0;
                     targetIndex = min - 1;
                 }
 
-                // 挤开后续项
+                // Shift the following items
                 foreach (var item in settings.MonitorItems.Where(x => x.SortIndex >= targetIndex))
                     item.SortIndex++;
                 

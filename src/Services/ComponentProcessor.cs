@@ -7,7 +7,7 @@ using WinMonitor.Core;
 namespace WinMonitor.Services
 {
     /// <summary>
-    /// 组件处理器：负责 CPU 和 GPU 的复杂数值加工（聚合、修正、过滤）
+    /// CPU and GPU values that need combining, correcting or filtering
     /// </summary>
     public class ComponentProcessor
     {
@@ -32,7 +32,7 @@ namespace WinMonitor.Services
         }
 
         /// <summary>
-        /// 获取 CPU 负载 (多核平均)
+        /// CPU load (average over cores)
         /// </summary>
         public float? GetCpuLoad()
         {
@@ -69,7 +69,7 @@ namespace WinMonitor.Services
         }
 
         /// <summary>
-        /// 获取 CPU 温度 (核心最大值)
+        /// CPU temperature (hottest core)
         /// </summary>
         public float? GetCpuTemp()
         {
@@ -107,7 +107,7 @@ namespace WinMonitor.Services
         }
 
         /// <summary>
-        /// 获取复合数值 (频率、功耗等带修正或过滤逻辑的数值)
+        /// Combined values (clock, power, ...) with corrections and filters
         /// </summary>
         public float? GetCompositeValue(string key, Dictionary<string, ISensor> sensorCache)
         {
@@ -116,7 +116,7 @@ namespace WinMonitor.Services
                 if (_sensorMap.CpuCoreCache.Count == 0) return null;
                 double sum = 0; int count = 0; float maxRaw = 0;
                 
-                // Zen 5 频率修正逻辑
+                // Zen 5 clock correction
                 float correctionFactor = 1.0f;
                 if (_sensorMap.CpuBusSpeedSensor != null && _sensorMap.CpuBusSpeedSensor.Value.HasValue)
                 {
@@ -144,7 +144,7 @@ namespace WinMonitor.Services
             {
                 if (sensorCache.TryGetValue("CPU.Power", out var s) && s.Value.HasValue) 
                 { 
-                    // 熔断保护：过滤异常高功耗
+                    // Drop impossible power readings
                     if (s.Value.Value > 600.0f) return null;
                     _cfg.UpdateMaxRecord(key, s.Value.Value); 
                     return s.Value.Value; 

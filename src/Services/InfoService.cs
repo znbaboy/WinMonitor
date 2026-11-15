@@ -1,18 +1,17 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using System.Runtime.InteropServices; // [Added] For P/Invoke
-using System.Diagnostics; // [Added] For Process
-using System.Net.NetworkInformation; // [Added] For NetworkChange
+using System.Runtime.InteropServices; // For P/Invoke
+using System.Diagnostics; // For Process
+using System.Net.NetworkInformation; // For NetworkChange
 using WinMonitor.Services;
 using WinMonitor.Core;
 
 namespace WinMonitor.Services
 {
     /// <summary>
-    /// 系统信息服务 (单例)
-    /// 负责管理 HOST, IP, Time 等看板数据的获取与缓存
-    /// 原 DashboardService
+    /// Dashboard values (singleton):
+    /// host name, IP, time, uptime
     /// </summary>
     public class InfoService
     {
@@ -43,21 +42,21 @@ namespace WinMonitor.Services
         private long _lastUpdateTick = 0;
         private int _currentInterval = INTERVAL_FAST;
 
-        // [Optimization] Cache time strings to avoid allocs every tick
+        // Cache time strings to avoid allocs every tick
         private string _lastTimeStr = "";
         private int _lastSecond = -1;
         private string _lastUptimeStr = "";
         private int _lastUptimeMinute = -1;
         
-        // [Fix] Offset for Fast Startup handling
+        // Offset for Fast Startup handling
         private long _uptimeOffsetTicks = 0;
 
-        // [Fix] 使用 QueryUnbiasedInterruptTime 排除休眠时间，解决"开机一天"的问题
+        // QueryUnbiasedInterruptTime leaves out sleep time (uptime would otherwise count it)
         [DllImport("kernel32.dll")]
         private static extern bool QueryUnbiasedInterruptTime(out ulong UnbiasedTime);
 
         /// <summary>
-        /// 初始化默认值并启动首次更新
+        /// Sets defaults and starts the first update
         /// </summary>
         private void Initialize()
         {
@@ -65,26 +64,26 @@ namespace WinMonitor.Services
             {
                 _data[KEY_HOST] = Environment.MachineName; // Hostname always available
                 _data[KEY_IP]   = DEFAULT_IP;
-                _data[KEY_TIME] = DateTime.Now.ToString("ddd HH:mm:ss"); // ★★★ 立即赋值当前时间，不再使用 00:00:00 默认值 ★★★
+                _data[KEY_TIME] = DateTime.Now.ToString("ddd HH:mm:ss"); // show the current time straight away
             }
             
-            // [Fix #287] 监听网络变更，立即触发IP刷新
+            // Network changes refresh the IP straight away
             NetworkChange.NetworkAddressChanged += (s, e) => {
                 _currentInterval = INTERVAL_FAST;
-                _lastUpdateTick = 0; // 强制下次 Update 立即执行
+                _lastUpdateTick = 0; // run the next Update now
             };
             
-            // [Optimization] 异步执行耗时的进程检查，避免阻塞程序启动或触发杀软扫描导致UI卡顿
+            // The process check runs in the background (slow, and can trigger antivirus scans)
             Task.Run(() => 
             {
                 CalculateUptimeOffset();
-                // [Fix] 强制让 UpdateTimeInfo 刷新数据，忽略分钟缓存，确保校准结果立即生效
+                // Refresh the time values now (skip the per-minute cache)
                 _lastUptimeMinute = -1;
-                // 校准完成后立即刷新一次数据，确保界面显示正确
+                // Refresh once the correction is known
                 UpdateTimeInfo();
             });
 
-            // [Fix] Calculate Uptime immediately so it's ready for first render
+            // Calculate Uptime immediately so it's ready for first render
             // (Initial value might be uncorrected for a few ms, which is acceptable)
             UpdateTimeInfo();
 
@@ -93,14 +92,14 @@ namespace WinMonitor.Services
         }
 
         /// <summary>
-        /// 计算开机时间偏差 (解决快速启动不重置问题，同时保留重启后登录等待的时间)
+        /// Uptime correction: Fast Startup does not reset it, but a wait at the sign-in screen should count
         /// </summary>
         private void CalculateUptimeOffset()
         {
             try
             {
-                // 1. 获取当前用户会话时长 (Session Time)
-                // 使用多个锚点进程防止单一进程重启导致误判
+                // 1. How long this session has run
+                // (several long-running processes, so one restart does not mislead)
                 long minStart = long.MaxValue;
                 foreach (var name in new[] { "explorer", "sihost", "taskhostw" })
                 {
@@ -112,34 +111,34 @@ namespace WinMonitor.Services
                     }
                 }
 
-                if (minStart == long.MaxValue) return; // 无法获取会话时间，不进行修正
+                if (minStart == long.MaxValue) return; // cannot tell: no correction
 
                 long sessionTicks = DateTime.Now.Ticks - minStart;
                 
-                // [Logic] 如果会话时间已经很长 (>10分钟)，说明不是刚开机(可能是睡眠唤醒或一直开着)，
-                // 此时直接信任内核时间，不需要重置。
+                // A session older than 10 minutes means this is not a fresh start
+                // (wake from sleep, or always on): trust the kernel time.
                 if (sessionTicks > 600L * 1000 * 10000) return;
 
-                // 2. 获取内核非休眠时间 (Unbiased Time)
+                // 2. Time without sleep (kernel)
                 if (!QueryUnbiasedInterruptTime(out ulong unbiasedVal))
                     unbiasedVal = (ulong)Environment.TickCount64 * 10000;
                 long unbiasedTicks = (long)unbiasedVal;
 
-                // 3. 获取系统物理运行时间 (Wall Clock Uptime)
-                // [Optimization] 直接使用 Environment.TickCount64 (包含休眠时间) 替代查找 System 进程
-                // 这比 Process.GetProcessesByName 更快且无权限问题
+                // 3. Time including sleep (wall clock)
+                // Environment.TickCount64 includes sleep
+                // (faster than looking up the System process, no permission issues)
                 long wallClockTicks = Environment.TickCount64 * 10000;
 
-                // [Core Logic] 区分 "重启等待" vs "快速启动残留"
-                // Case A (重启等待): 重启 -> 登录界面挂机7h -> 登录。
-                //    WallClock(7h) ≈ Unbiased(7h). 差异很小。 -> 应保留 7h (不修正)。
-                // Case B (快启残留): 昨用5h -> 关机(快启) -> 今开 -> 登录。
-                //    WallClock(24h+) >> Unbiased(5h+). 差异巨大(中间在休眠)。 -> 应显示 0h (修正)。
+                // Restart-and-wait vs Fast Startup leftover:
+                // A (restart, then 7 h at the sign-in screen):
+                //    wall clock (7 h) ~ kernel (7 h): small difference -> keep 7 h
+                // B (5 h yesterday, Fast Startup shutdown, sign in today):
+                //    wall clock (24 h+) >> kernel (5 h+): it slept in between -> show 0 h
                 
-                // 判定阈值：如果 物理时间 比 内核时间 多出 30分钟以上，说明中间经历过长时间休眠/关机
+                // More than 30 minutes difference means a long sleep or shutdown happened
                 if (wallClockTicks > unbiasedTicks + 1800L * 1000 * 10000)
                 {
-                    // 确认为快速启动残留，扣除旧时间，从本次会话开始计算
+                    // Fast Startup leftover: count from this session
                     _uptimeOffsetTicks = unbiasedTicks - sessionTicks;
                 }
             }
@@ -147,7 +146,7 @@ namespace WinMonitor.Services
         }
 
         /// <summary>
-        /// 线程安全地获取数据
+        /// Thread-safe read
         /// </summary>
         public string GetValue(string key)
         {
@@ -158,17 +157,17 @@ namespace WinMonitor.Services
         }
 
         /// <summary>
-        /// 外部注入通用数据 (例如插件抓取的数据)
+        /// Sets any value from outside
         /// </summary>
         public void InjectValue(string key, string value)
         {
             if (string.IsNullOrEmpty(key)) return;
-            // [Optimization] Intern keys and values from external injections
+            // Intern keys and values from external injections
             SetData(UIUtils.Intern(key), value);
         }
 
         /// <summary>
-        /// 外部注入 IP (例如从配置缓存恢复)
+        /// Sets the IP from outside (e.g. a cached value)
         /// </summary>
         public void InjectIP(string ip)
         {
@@ -193,7 +192,7 @@ namespace WinMonitor.Services
         }
 
         /// <summary>
-        /// 主循环调用 (建议每帧或定时器调用)
+        /// Called from the refresh loop
         /// </summary>
         public void Update()
         {
@@ -215,7 +214,7 @@ namespace WinMonitor.Services
             
             bool isNewSecond = now.Second != _lastSecond;
 
-            // [Optimization] Only format time if second changed
+            // Only format time if second changed
             if (isNewSecond)
             {
                 _lastSecond = now.Second;
@@ -224,22 +223,22 @@ namespace WinMonitor.Services
             }
 
             // Uptime
-            // [Optimization] Update every minute, hide seconds
-            // [Fix] 改用 QueryUnbiasedInterruptTime (不含休眠) 替代 Environment.TickCount64 (含休眠)
+            // Update every minute, hide seconds
+            // QueryUnbiasedInterruptTime (no sleep) instead of TickCount64 (includes sleep)
             TimeSpan ts;
             try 
             {
                 if (QueryUnbiasedInterruptTime(out ulong ticks))
                 {
-                    // [Fix] 减去快速启动导致的偏差
+                    // minus the Fast Startup leftover
                     long realTicks = (long)ticks - _uptimeOffsetTicks;
                     if (realTicks < 0) realTicks = 0;
                     ts = TimeSpan.FromTicks(realTicks);
                 }
                 else
                 {
-                    // Fallback (虽然理论上不会失败)
-                    // TickCount64 无法排除休眠，也无法处理快启，但作为保底
+                    // Fallback (should not happen):
+                    // TickCount64 counts sleep and Fast Startup time
                     ts = TimeSpan.FromMilliseconds(Environment.TickCount64);
                 }
             }
@@ -254,15 +253,11 @@ namespace WinMonitor.Services
 
                 if (ts.TotalDays < 1)
                 {
-                    _lastUptimeStr = LanguageManager.CurrentLang == "zh"
-                        ? $"{ts.Hours}时 {ts.Minutes}分"
-                        : $"{ts.Hours}h {ts.Minutes}m";
+                    _lastUptimeStr = $"{ts.Hours}h {ts.Minutes}m";
                 }
                 else
                 {
-                    _lastUptimeStr = LanguageManager.CurrentLang == "zh"
-                        ? $"{(int)ts.TotalDays}天 {ts.Hours}时 {ts.Minutes}分"
-                        : $"{(int)ts.TotalDays}d {ts.Hours}h {ts.Minutes}m";
+                    _lastUptimeStr = $"{(int)ts.TotalDays}d {ts.Hours}h {ts.Minutes}m";
                 }
                 
                 SetData(KEY_UPTIME, _lastUptimeStr);
@@ -271,7 +266,7 @@ namespace WinMonitor.Services
 
         private void UpdateData()
         {
-            // [Optimization] Host info is static, only set once or if changed
+            // Host info is static, only set once or if changed
             string currentHost = Environment.MachineName;
             if (GetValue(KEY_HOST) != currentHost)
             {
@@ -292,7 +287,7 @@ namespace WinMonitor.Services
                 // Validate IP
                 if (!string.IsNullOrEmpty(ip) && ip != DEFAULT_IP)
                 {
-                    // [Optimization] Only update if changed
+                    // Only update if changed
                     if (GetValue(KEY_IP) != ip)
                     {
                         SetData(KEY_IP, ip);
@@ -315,8 +310,8 @@ namespace WinMonitor.Services
         {
             lock (_lock)
             {
-                // [Optimization] Intern values to reduce duplicates (e.g. "KB/s", "luffy-pc")
-                // [Fix] Do NOT intern dynamic time strings (Time, Uptime) as they change constantly and pollute the pool
+                // Intern values to reduce duplicates (e.g. "KB/s", host names)
+                // Do NOT intern dynamic time strings (Time, Uptime) as they change constantly and pollute the pool
                 if (key == KEY_TIME || key == KEY_UPTIME)
                 {
                     _data[key] = value;

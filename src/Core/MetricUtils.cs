@@ -22,26 +22,26 @@ namespace WinMonitor.Core
 
     /// <summary>
     /// Metric formatting, units, states and bar values
-    /// 包含：类型解析、数据格式化、阈值评估、状态管理
+    /// Type lookup, formatting, thresholds and state colours
     /// </summary>
     public static class MetricUtils
     {
         // =========================================================
-        // 1. 全局状态 (自动缓存，3秒刷新)
+        // 1. Power state (cached, refreshed every 3 s)
         // =========================================================
-        private static long _lastPowerCheck = 0;// 上次刷新电源功耗时间
-        private static bool _lastAc = false;// 是否接通电源
-        private static bool _lastCharging = false;// 是否正在充电 (排除充满/保护)
+        private static long _lastPowerCheck = 0; // Last power-state check (ms)
+        private static bool _lastAc = false; // On AC power
+        private static bool _lastCharging = false; // Charging (not just full / battery protection)
 
         /// <summary>
-        /// 获取当前电源状态 (Unified)
-        /// AcOnline: 是否接通电源
-        /// IsCharging: 是否正在充电 (排除充满/保护)
+        /// Current power state.
+        /// AcOnline: on AC power
+        /// IsCharging: charging (not just full / battery protection)
         /// </summary>
         public static (bool AcOnline, bool IsCharging) GetPowerStatus()
         {
             long now = Environment.TickCount64;
-            if (now - _lastPowerCheck > 3000) // 3000ms 自动节流
+            if (now - _lastPowerCheck > 3000) // refresh at most every 3 s
             {
                 _lastPowerCheck = now;
                 try
@@ -67,7 +67,7 @@ namespace WinMonitor.Core
         [System.Runtime.InteropServices.DllImport("kernel32.dll")]
         private static extern bool GetSystemPowerStatus(out SYSTEM_POWER_STATUS status);
 
-        // [Optimization] Cache data size units
+        // Cache data size units
         private static readonly string[] _dataSizes = { "KB", "MB", "GB", "TB", "PB" };
 
         public const int STATE_SAFE = 0;
@@ -75,7 +75,7 @@ namespace WinMonitor.Core
         public const int STATE_CRIT = 2;
 
         // =========================================================
-        // 2. 类型解析 (原 MetricHelper)
+        // 2. Types
         // =========================================================
         public static MetricType GetType(string key)
         {
@@ -108,22 +108,22 @@ namespace WinMonitor.Core
         }
 
         // =========================================================
-        // 3. 格式化逻辑 (原 Formatter)
+        // 3. Formatting
         // =========================================================
 
         /// <summary>
-        /// 获取纯数值字符串 (已处理缩放、舍入、紧凑模式)
+        /// The value as text (scaled, rounded, compact when asked)
         /// </summary>
         public static string GetValueStr(string key, float? value, bool compact = false, string? userFormat = null)
         {
             float v = value ?? 0.0f;
             var type = GetType(key);
 
-            // 1. 内存特殊处理 (容量 vs 百分比)
+            // 1. Memory: size or percent
             if (type == MetricType.Memory)
             {
                  var cfg = Settings.Load();
-                 if (cfg.MemoryDisplayMode == 1 && !IsPercentUnitOverride(userFormat)) // 容量模式
+                 if (cfg.MemoryDisplayMode == 1 && !IsPercentUnitOverride(userFormat)) // size mode
                  {
                      double totalGB = (key.IndexOf("MEM", StringComparison.OrdinalIgnoreCase) >= 0) 
                         ? Settings.DetectedRamTotalGB 
@@ -131,25 +131,25 @@ namespace WinMonitor.Core
 
                      if (totalGB > 0)
                      {
-                         // 转换为字节 -> 格式化 -> 取数值部分
-                         // [Refactor] 使用自适应格式化 (-1)，确保 100GB 时不显示 .0
+                         // bytes -> formatted -> number part
+                         // adaptive decimals (-1) so 100 GB shows without .0
                          return FormatDataSizeParts((v / 100.0) * totalGB * 1073741824.0, -1).val;
                      }
                  }
             }
 
-            // 2. 数据量/速度 (自动单位缩放)
+            // 2. Data sizes / speeds (automatic unit)
             if (type == MetricType.DataSpeed || type == MetricType.DataSize)
             {
                 //return FormatDataSizeParts(v, compact ? -1 : 1).val;
                 return FormatDataSizeParts(v,-1 ).val;
             }
 
-            // 4. 标准模式 (Panel)
+            // 4. Panel
             if (type == MetricType.FPS || type == MetricType.RPM) return $"{v:0}";
-            if (type == MetricType.Frequency) return $"{v/1000f:F1}"; // 频率保持 F1，通常 GHz 需要一位小数
+            if (type == MetricType.Frequency) return $"{v/1000f:F1}"; // clocks in GHz with one decimal
             
-            // 内存百分比、负载、温度、功耗等
+            // memory %, load, temperature, power, ...
 
             return FormatValueAdaptive(v, -1);
         }
@@ -162,24 +162,24 @@ namespace WinMonitor.Core
         }
 
         /// <summary>
-        /// 内部通用的数值格式化逻辑 (自适应小数点)
+        /// Number formatting (adaptive decimals)
         /// </summary>
         private static string FormatValueAdaptive(double val, int decimals)
         {
             if (decimals >= 0)
             {
-                // 固定小数位模式
+                // Fixed decimals
                 string format = "0." + new string('0', decimals);
                 if (decimals == 0) format = "0";
                 
-                // [Fix] 即使是固定模式，如果数值 >= 99.95，也遵循用户习惯显示为整数
-                // 除非 decimals > 1 (通常是电压/电流等需要高精度的场合)
+                // Even with fixed decimals, values >= 99.95 show as whole numbers
+                // unless decimals > 1 (voltage, current, ...)
                 if (val >= 99.95 && decimals <= 1) return val.ToString("0");
                 
                 return val.ToString(format);
             }
 
-            // 自适应模式 (decimals < 0)
+            // Adaptive (decimals < 0)
             if (val < 9.995) return val.ToString("0.00");   // 0.00 - 9.99
             if (val < 99.95) return val.ToString("0.0");   // 10.0 - 99.9
             return val.ToString("0");                      // 100+
@@ -187,19 +187,19 @@ namespace WinMonitor.Core
 
         public enum UnitContext
         {
-            Panel,          // 主界面 (完整, 带空格)
-            Taskbar,        // 任务栏 (紧凑, 无空格)
-            SettingsPanel,  // 设置界面 - 主界面预览 (带占位符)
+            Panel, // Panel (full, with space)
+            Taskbar, // Compact (no space)
+            SettingsPanel, // Settings preview (with placeholder)
         }
 
         /// <summary>
-        /// 获取单位字符串 (处理上下文、动态单位)
+        /// The unit text (by context; some units depend on the value)
         /// </summary>
         public static string GetUnitStr(string key, float? value, UnitContext context)
         {
             var type = GetType(key);
             
-            // 1. 内存 (GB vs %)
+            // 1. Memory (GB or %)
             if (type == MetricType.Memory) 
             {
                 if (Settings.Load().MemoryDisplayMode != 1) return "%";
@@ -213,11 +213,10 @@ namespace WinMonitor.Core
             }
             
 
-            // 2. 数据 (动态单位)
+            // 2. Data (unit depends on the value)
             if (type == MetricType.DataSpeed || type == MetricType.DataSize)
             {
-                // Settings 模式下，返回 {u} 占位符，提示用户这是动态单位
-                // 仅 SettingsPanel 和 SettingsTaskbar 返回占位符
+                // Settings show the {u} placeholder for automatic data units
                 if (context == UnitContext.SettingsPanel)
                 {
                     if (type == MetricType.DataSpeed)
@@ -225,9 +224,9 @@ namespace WinMonitor.Core
                     return "{u}";
                 }
 
-                // 需要根据数值重新计算单位 (FormatDataSizeParts 开销很小)
-                // UnitContext.Taskbar 对应紧凑模式 -> 整数 (0)
-                // UnitContext.Panel 对应主界面 -> 自适应 (-1)
+                // Work out the unit from the value (cheap)
+                // Compact context -> whole numbers (0)
+                // Panel -> adaptive decimals (-1)
                 int decimals = (context == UnitContext.Taskbar) ? 0 : -1;
                 string u = FormatDataSizeParts(value ?? 0, decimals).unit;
                 
@@ -236,26 +235,26 @@ namespace WinMonitor.Core
                 
                 return u;
             }
-            // ★★★ [2] 新增：如果是插件项，去 InfoService 查默认单位 ★★★
+            // Dashboard items: unit from InfoService
             if (key.StartsWith("DASH.", StringComparison.OrdinalIgnoreCase))
             {
-                 // 尝试获取刚才 SyncService 注入的单位
+                 // Unit injected at runtime, if any
                  string u = InfoService.Instance.GetValue(key + ".Unit");
                  if (!string.IsNullOrEmpty(u)) return u;
             }
 
-            // 3. 电池充电后缀
-            // [Fix] 仅在真正充电时显示闪电图标 (AcOnline + IsCharging)
-            // 充满电插着电源时 (AcOnline=true, IsCharging=false) 不应显示闪电
+            // 3. Battery: charging suffix
+            // Lightning only while actually charging (AC and charging),
+            // not when plugged in and full
             var pStatus = GetPowerStatus();
             string suffix = (
                 key.StartsWith("BAT", StringComparison.OrdinalIgnoreCase) 
                 && pStatus.AcOnline 
-                && pStatus.IsCharging // <--- 新增条件
+                && pStatus.IsCharging
                 && context != UnitContext.SettingsPanel 
                 ) ? "⚡" : "";
 
-            // 4. 标准单位表
+            // 4. Standard units
             return type switch
             {
                 MetricType.Percent     => "%" + suffix,
@@ -264,55 +263,40 @@ namespace WinMonitor.Core
                 MetricType.Power       => "W" + suffix,
                 MetricType.Voltage     => "V" + suffix,
                 MetricType.Current     => "A" + suffix,
-                // Taskbar 和 SettingsTaskbar 使用简写
+                // Compact context uses the short forms
                 MetricType.FPS         => context == UnitContext.Taskbar ? "F" : " FPS",
                 MetricType.RPM         => context == UnitContext.Taskbar ? "R" : " RPM",
                 _ => ""
             };
         }
 
-        public static string GetSampleValueStr(string key)
-        {
-            var type = GetType(key);
-            //if (type == MetricType.Memory && Settings.Load().MemoryDisplayMode == 1) return "99.9";
-            
-            return type switch
-            {
-                MetricType.Frequency => "9.9",// GHz
-                // MetricType.Voltage => "1.25",// V
-                MetricType.RPM => "9999", // RPM
-                MetricType.DataSpeed => "9.9.",// MB
-                MetricType.DataSize => "9.9.",// MB
-                _ => "99.9"
-            };
-        }
 
         public static string GetDisplayUnit(string key, string calculatedUnit, string? userFormat)
         {
            if (string.IsNullOrEmpty(userFormat))
             {
                 if (string.IsNullOrEmpty(userFormat) && userFormat != null) return ""; // Empty = Hide
-                // [Optimization] GetUnitStr already returns the correct unit (e.g., "MB" or "MB/s") based on context.
+                // GetUnitStr already returns the correct unit (e.g., "MB" or "MB/s") based on context.
                 // We don't need to append "/s" here anymore.
                 return calculatedUnit;
             }
             return userFormat.Contains("{u}") ? userFormat.Replace("{u}", calculatedUnit) : userFormat;
         }
-        // [Refactor] 统一数据大小格式化逻辑
+        // Data sizes
         
         /// <summary>
-        /// 将字节数转换为带单位的友好显示，返回数值字符串与单位字符串。
+        /// Bytes to a friendly size: returns the number and the unit separately.
         /// </summary>
         public static (string val, string unit) FormatDataSizeParts(double bytes, int decimals = -1)
         {
-            // [Optimization] Use cached array
+            // Use cached array
             // string[] sizes = { "KB", "MB", "GB", "TB", "PB" };
 
-            // 将字节转换为 KB 作为基准
+            // Start from KB
             double len = bytes / 1024.0;
 
-            // 逐级放大单位，直到数值小于 1000 或到达最大单位
-            // [Optimize] 使用 1000 而不是 1024 作为阈值，避免出现 "1023 KB" 这种较长的字符串，提前转换为 "0.99 MB"
+            // Step up until below 1000 or at the largest unit
+            // 1000 (not 1024) avoids long texts like "1023 KB" (shows "0.99 MB" instead)
             int order = 0;
             while (len >= 1000 && order < _dataSizes.Length - 1)
             {
@@ -320,7 +304,7 @@ namespace WinMonitor.Core
                 len /= 1024.0;
             }
 
-            // 返回格式化后的数值与对应单位
+            // Number and unit
             return (FormatValueAdaptive(len, decimals), _dataSizes[order]);
         }
 
@@ -333,7 +317,7 @@ namespace WinMonitor.Core
 
 
         // =========================================================
-        // 4. 评估逻辑 (原 MetricEvaluator)
+        // 4. Thresholds and states
         // =========================================================
         public static int GetState(string key, double value)
         {
@@ -343,13 +327,13 @@ namespace WinMonitor.Core
             var type = GetType(key);
             double checkValue = value;
 
-            // 对于动态范围的指标 (CPU频率, 功耗, 转速, FPS)，
-            // 状态判断应该基于它们相对于"历史最大值"的百分比，而不是绝对数值。
-            // 例如：如果 CPU 频率跑到了 历史最大值的 90%，就认为是高负载(红色)。
-            // 否则 4.0GHz 可能永远触发不了阈值。
+            // Values without a fixed maximum (clock, power, fan speed)
+            // are judged against their recorded maximum, not an absolute value:
+            // e.g. a CPU clock at 90% of its maximum counts as high (red).
+            // Otherwise 4.0 GHz might never reach a threshold.
             if (type is MetricType.Frequency or MetricType.Power or MetricType.RPM or MetricType.FPS or MetricType.Voltage or MetricType.Current)
             {
-                 // [Refactor] Use GetAdaptivePercentage directly since we are already inside the adaptive type check block
+                 // Use GetAdaptivePercentage directly since we are already inside the adaptive type check block
                  checkValue = GetAdaptivePercentage(key, value) * 100.0;
 
                  if (checkValue >= 90) return STATE_CRIT;
@@ -363,7 +347,7 @@ namespace WinMonitor.Core
 
             var (warn, crit) = GetThresholds(key);
 
-            // 电池低电量反向判断
+            // Battery: low is bad (reversed)
             if (key.Equals("BAT.Percent", StringComparison.OrdinalIgnoreCase))
             {
                 if (checkValue <= crit) return STATE_CRIT;
@@ -396,13 +380,13 @@ namespace WinMonitor.Core
         }
 
         /// <summary>
-        /// 计算进度条显示值 (0.0 - 1.0)
-        /// 包含自适应最大值逻辑和最小视觉宽度修正 (5%)
+        /// The bar's fill (0.0 - 1.0)
+        /// Uses the recorded maximum where needed, and shows at least 5%
         /// </summary>
         public static double GetProgressValue(string key, double value)
         {
-            // 1. 获取基础百分比 (自适应或归一化)
-            // [Refactor] Inlined GetUnifiedPercent logic
+            // 1. Base percentage
+            // Inlined GetUnifiedPercent logic
             var type = GetType(key);
             double rawPct;
             
@@ -411,11 +395,11 @@ namespace WinMonitor.Core
             else
                 rawPct = value / 100.0;
 
-            // 2. 负值处理 (充电状态) - 统一返回 1.0 (满条)，颜色由状态决定
+            // 2. Negative (charging): full bar, colour from the state
             if (rawPct < 0) rawPct = Math.Abs(rawPct);
 
-            // 3. 视觉修正：限制在 [0.05, 1.0] 之间
-            // 确保即使数值很小也能看到一条细线
+            // 3. Keep within [0.05, 1.0]
+            // so a small value still shows a thin bar
             return Math.Max(0.05, Math.Min(1.0, rawPct));
         }
 
@@ -443,7 +427,7 @@ namespace WinMonitor.Core
         }
         
         // =========================================================
-        // 5. 基础转换
+        // 5. Conversions
         // =========================================================
         public static int ParseInt(string s) => int.TryParse(new string(s?.Where(c => char.IsDigit(c) || c == '-').ToArray()), out int v) ? v : 0;
         public static double ParseDouble(string s) => double.TryParse(new string(s?.Where(c => char.IsDigit(c) || c == '.' || c == '-').ToArray()), out double v) ? v : 0;

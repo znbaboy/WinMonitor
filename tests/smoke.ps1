@@ -89,7 +89,7 @@ function Window($p, [string]$title, [string]$name, [int]$w = 900, [int]$h = 700)
 reg add HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize /v AppsUseLightTheme /t REG_DWORD /d 0 /f | Out-Null
 
 # ---------------------------------------------------------------- 1. default launch
-$p = Start-App '{ "AutoHide": false, "UIScale": 0.9 }'
+$p = Start-App '{ "UIScale": 0.9 }'
 if ($p) {
   $h = Panel $p
   if (-not $h) { Fail 'panel window not visible' }
@@ -121,13 +121,13 @@ if ($p) {
 }
 
 # ---------------------------------------------------------------- 2. light and dark looks
-$p = Start-App '{ "Skin": "Windows11_Light", "AutoHide": false, "UIScale": 0.85 }'
+$p = Start-App '{ "Skin": "Windows11_Light", "UIScale": 0.85 }'
 if ($p) { $h = Panel $p; if ($h) { Shot $h 'panel-light' 24; Ok 'light look' } else { Fail 'light look: no panel' } }
-$p = Start-App '{ "Skin": "Windows11_Dark", "Opacity": 0.6, "PanelWidth": 300, "AutoHide": false, "UIScale": 0.85 }'
+$p = Start-App '{ "Skin": "Windows11_Dark", "Opacity": 0.6, "PanelWidth": 300, "UIScale": 0.85 }'
 if ($p) { $h = Panel $p; if ($h) { Shot $h 'panel-dark-60' 24; Ok 'dark look, 60% opacity' } else { Fail 'dark look: no panel' } }
 
 # ---------------------------------------------------------------- 4. click-through
-$p = Start-App '{ "ClickThrough": true, "AutoHide": false, "UIScale": 0.9 }'
+$p = Start-App '{ "ClickThrough": true, "UIScale": 0.9 }'
 if ($p) {
   $h = Panel $p
   if (-not $h) { Fail 'click-through: panel not visible' }

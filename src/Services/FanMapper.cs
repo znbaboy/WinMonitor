@@ -7,11 +7,10 @@ using WinMonitor.Core;
 namespace WinMonitor.Services
 {
     /// <summary>
-    /// 专用服务：负责智能识别和映射风扇/水泵/机箱风扇
+    /// Finds CPU fan, pump and case fan sensors
     /// </summary>
     public class FanMapper
     {
-        // 将原 SensorMap 中的 ScanAndMapFans 及相关辅助方法移到这里
         
         public void ScanAndMapFans(Computer computer, Settings cfg, Dictionary<string, ISensor> targetMap)
         {
@@ -19,12 +18,12 @@ namespace WinMonitor.Services
             ISensor? cpuPump = null; 
             ISensor? caseFan = null;
             
-            // 1. 搜集全系统所有“活着”的风扇 (采用黑名单机制)
+            // 1. Collect every fan that is spinning (with a block list)
             var activeFans = new List<(IHardware Hw, ISensor S, float Rpm)>();
             
             void CollectFans(IHardware hw)
             {
-                // ★★★ 黑名单：坚决排除以下类型的风扇 ★★★
+                // Never use these fans:
                 bool isExcluded = hw.HardwareType == HardwareType.GpuNvidia ||
                                   hw.HardwareType == HardwareType.GpuAmd ||
                                   hw.HardwareType == HardwareType.GpuIntel ||
@@ -40,7 +39,7 @@ namespace WinMonitor.Services
                     {
                         if (s.SensorType == SensorType.Fan && s.Value.HasValue)
                         {
-                            // [底噪过滤] 门槛 200 RPM
+                            // ignore readings below 200 RPM
                             if (s.Value.Value > 200)
                             {
                                 activeFans.Add((hw, s, s.Value.Value));
@@ -52,18 +51,18 @@ namespace WinMonitor.Services
             }
             foreach (var hw in computer.Hardware) CollectFans(hw);
 
-            // 辅助函数：判断是否已被占用
+            // Already assigned?
             bool IsTaken(ISensor s) => s == cpuFan || s == cpuPump || s == caseFan;
             
             // -----------------------------------------------------------
-            // 步骤 2: 尊重用户手动配置 (最高优先级)
+            // Step 2: the user's own choice wins
             // -----------------------------------------------------------
             if (!string.IsNullOrEmpty(cfg.PreferredCpuFan)) cpuFan = FindFanByConfig(activeFans, cfg.PreferredCpuFan);
             if (!string.IsNullOrEmpty(cfg.PreferredCaseFan)) caseFan = FindFanByConfig(activeFans, cfg.PreferredCaseFan);
             if (!string.IsNullOrEmpty(cfg.PreferredCpuPump)) cpuPump = FindFanByConfig(activeFans, cfg.PreferredCpuPump);
 
             // -----------------------------------------------------------
-            // 步骤 3: 确立 CPU 风扇
+            // Step 3: CPU fan
             // -----------------------------------------------------------
             if (cpuFan == null && activeFans.Count > 0)
             {
@@ -84,7 +83,7 @@ namespace WinMonitor.Services
             }
 
             // -----------------------------------------------------------
-            // 步骤 4: 确立 水泵 (Pump)
+            // Step 4: pump
             // -----------------------------------------------------------
             if (cpuPump == null && activeFans.Count > 0)
             {
@@ -104,7 +103,7 @@ namespace WinMonitor.Services
                 }
             }
 
-            // 智能猜想水泵 (转速 > 3000)
+            // Guess a pump (above 3000 RPM)
             if (cpuPump == null)
             {
                 var highSpeedCandidate = activeFans.Where(x => !IsTaken(x.S) && x.Rpm > 3000)
@@ -114,7 +113,7 @@ namespace WinMonitor.Services
             }
 
             // -----------------------------------------------------------
-            // 步骤 5: 确立 机箱风扇
+            // Step 5: case fan
             // -----------------------------------------------------------
             if (caseFan == null && activeFans.Count > 0)
             {
@@ -134,7 +133,7 @@ namespace WinMonitor.Services
                 }
             }
 
-            // 3. 写入 Map
+            // 3. Store the mapping
             if (cpuFan != null) targetMap["CPU.Fan"] = cpuFan;
             if (caseFan != null) targetMap["CASE.Fan"] = caseFan;
             if (cpuPump != null) targetMap["CPU.Pump"] = cpuPump;

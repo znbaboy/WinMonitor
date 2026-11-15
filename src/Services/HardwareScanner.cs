@@ -6,7 +6,7 @@ using LibreHardwareMonitor.Hardware;
 namespace WinMonitor.Services
 {
     /// <summary>
-    /// 硬件扫描器：负责硬件的发现、列举和命名逻辑 (主要服务于 UI 设置)
+    /// Lists hardware and names it (for the settings page)
     /// </summary>
     public static class HardwareScanner
     {
@@ -24,7 +24,7 @@ namespace WinMonitor.Services
         }
 
         /// <summary>
-        /// 清除所有扫描缓存
+        /// Clears the scan caches
         /// </summary>
         public static void ClearCache()
         {
@@ -36,12 +36,12 @@ namespace WinMonitor.Services
         }
 
         /// <summary>
-        /// 智能命名：将传感器与其所属硬件结合命名，并处理 SuperIO 芯片名的替换
+        /// Names a sensor together with its hardware (SuperIO chips get the motherboard name)
         /// </summary>
         public static string GenerateSmartName(ISensor sensor, IHardware hardware, IComputer computer)
         {
             string hwName = hardware.Name;
-            // 如果是 SuperIO，尝试替换为主板名
+            // SuperIO: use the motherboard name
             if (hardware.HardwareType == HardwareType.SuperIO)
             {
                 var mobo = computer.Hardware.FirstOrDefault(h => h.HardwareType == HardwareType.Motherboard);
@@ -51,7 +51,7 @@ namespace WinMonitor.Services
         }
 
         /// <summary>
-        /// 列出所有网卡名称
+        /// All network adapters
         /// </summary>
         public static List<string> ListAllNetworks(IComputer computer)
         {
@@ -67,7 +67,7 @@ namespace WinMonitor.Services
         }
 
         /// <summary>
-        /// 列出所有硬盘名称
+        /// All disks
         /// </summary>
         public static List<string> ListAllDisks(IComputer computer)
         {
@@ -83,7 +83,7 @@ namespace WinMonitor.Services
         }
 
         /// <summary>
-        /// 列出所有显卡名称，供旧调用点使用。
+        /// All GPU names (older callers).
         /// </summary>
         public static List<string> ListAllGpus(IComputer computer)
         {
@@ -91,7 +91,7 @@ namespace WinMonitor.Services
         }
 
         /// <summary>
-        /// 列出所有显卡选项，Value 使用硬件 Identifier，避免同型号多显卡被合并。
+        /// All GPU options; Value is the hardware identifier, so identical cards stay separate.
         /// </summary>
         public static List<GpuOption> ListAllGpuOptions(IComputer computer)
         {
@@ -136,7 +136,7 @@ namespace WinMonitor.Services
                 string.Equals(GetHardwareValue(h), configValue, StringComparison.OrdinalIgnoreCase));
             if (byIdentifier != null) return byIdentifier;
 
-            // 兼容旧配置：旧版本保存的是显卡名。若同名多卡，旧值无法唯一定位，交给自动模式。
+            // Older settings stored the GPU name. With several identical cards it cannot pick one, so automatic is used.
             var byName = gpus.Where(h => string.Equals(h.Name, configValue, StringComparison.OrdinalIgnoreCase)).ToList();
             return byName.Count == 1 ? byName[0] : null;
         }
@@ -175,7 +175,7 @@ namespace WinMonitor.Services
         }
 
         /// <summary>
-        /// 列出所有风扇传感器 (排除 CPU/GPU 等核心自带风扇，主要针对主板/机箱风扇)
+        /// All fan sensors (motherboard / case fans; CPU and GPU fans excluded)
         /// </summary>
         public static List<string> ListAllFans(IComputer computer, object syncLock)
         {
@@ -212,7 +212,7 @@ namespace WinMonitor.Services
         }
 
         /// <summary>
-        /// 列出所有适合作为主板/系统温度的传感器
+        /// All sensors that can stand for the motherboard / system temperature
         /// </summary>
         public static List<string> ListAllMoboTemps(IComputer computer, object syncLock)
         {

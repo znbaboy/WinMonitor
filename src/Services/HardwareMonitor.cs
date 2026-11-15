@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using System.Runtime.InteropServices; // ★★★ 新增：引用用于内存修剪的库
-using System.Reflection; // ★★★ 新增：用于反射关闭历史记录
+using System.Runtime.InteropServices; // for working-set trimming
+using System.Reflection; // for turning off sensor history
 using LibreHardwareMonitor.Hardware;
 using WinMonitor.Core;
 using System.Linq;
@@ -22,24 +22,24 @@ namespace WinMonitor.Services
         private readonly Computer _computer;
         private readonly object _lock = new object();
 
-        // 拆分出的子服务
+        // Helper services
         private readonly SensorMap _sensorMap;
         private readonly NetworkManager _networkManager;
         private readonly DiskManager _diskManager;
         private readonly DriverInstaller _driverInstaller;
         private readonly HardwareValueProvider _valueProvider;
 
-        // 性能计数器管理器
+        // Performance counters
         private readonly PerformanceCounterManager _perfCounterManager;
 
         private readonly Dictionary<string, float> _lastValidMap = new();
         
-        // 状态标记 (防止并发重载)
+        // Reload guard
         private volatile bool _isReloading = false;
         private volatile bool _isOpening = false;
         private bool _gpuMapRepairAttempted = false;
 
-        // 计时器相关
+        // Timing
         private long _tickCounter = 0;
         private double _secondAccumulator = 0;
         private long _secondsCounter = 0;
@@ -47,7 +47,7 @@ namespace WinMonitor.Services
         #endregion
 
         #region Public Properties
-        // [新增] 允许 UI 层访问原始硬件树（用于硬件信息面板）
+        // The raw hardware tree (for the Hardware Info window)
         public IComputer ComputerInstance => _computer;
         public object SyncLock => _lock;
         #endregion
@@ -58,14 +58,13 @@ namespace WinMonitor.Services
             _cfg = cfg;
             Instance = this;
 
-            // 1. 初始化 Computer
+            // 1. Set up LibreHardwareMonitor
             _computer = new Computer()
             {
-                // ★★★ 修正：强制开启 CPU ★★★
-                // 必须始终为 true。如果依赖 IsAnyEnabled("")，当用户未开启任何 CPU 监控项时，
-                // LHM 将不会初始化 CPU 节点。后续即使通过热切换开启了风扇监控，
-                // 由于 RefreshHardwareConfig 仅切换 IsControllerEnabled 而不更新 IsCpuEnabled，
-                // 依然无法读取到依赖 CPU 节点的传感器数据。
+                // CPU must always be on.
+                // If it followed the CPU items, LibreHardwareMonitor would skip the CPU node when none is shown,
+                // and sensors that depend on it (e.g. fans switched on later) could never be read,
+                // because RefreshHardwareConfig only toggles IsControllerEnabled.
                 IsCpuEnabled = true, 
                 
                 IsGpuEnabled = true,
@@ -74,27 +73,26 @@ namespace WinMonitor.Services
                 IsStorageEnabled = true,
                 IsMotherboardEnabled = true,
                 
-                // ★★★ 优化 T0：动态开启控制器扫描 ★★★
-                // 默认关闭以避免 USB 冲突，仅当需要风扇/水泵时开启
+                // Controllers (fans / pumps) only when needed: scanning them can disturb USB devices
                 IsControllerEnabled = ShouldEnableController(), 
 
-                // 开启电池监控
+                // Battery
                 IsBatteryEnabled = true,
 
-                // 顺便确保 PSU 也关闭（通常不需要监控电源模块，除非是高端 Corsair 电源）
+                // No power supply monitoring (only some high-end PSUs report anything)
                 IsPsuEnabled = false
             };
 
-            // ★★★ [新增] 1. 初始化计数器管理器 (必须在 ValueProvider 之前) ★★★
+            // Performance counters first (HardwareValueProvider uses them)
             _perfCounterManager = new PerformanceCounterManager();
 
-            // 2. 初始化服务
+            // 2. Helper services
             _sensorMap = new SensorMap();
             _networkManager = new NetworkManager(_perfCounterManager);
             _diskManager = new DiskManager();
             _driverInstaller = new DriverInstaller(cfg, ReloadComputerSafe, ReleaseComputerForDriverInstall);
 
-            // ★★★ [修改] 2. 将 Manager 注入给 ValueProvider ★★★
+            // Give the counters to HardwareValueProvider
             _valueProvider = new HardwareValueProvider(
                 _computer, 
                 cfg, 
@@ -106,7 +104,7 @@ namespace WinMonitor.Services
                 _lastValidMap
             );
 
-            // 3. 异步启动 (唯一优化：不卡UI)
+            // 3. Open the hardware in the background (keeps the UI responsive)
             InitializeAsync();
         }
         #endregion
@@ -120,43 +118,41 @@ namespace WinMonitor.Services
 
         public string GetNetworkIP() => _networkManager.GetCurrentIP();
 
-        // ★★★ 新增：允许主程序手动触发驱动检查 (用于解决启动弹窗冲突) ★★★
+        // Lets the app run the driver check itself (avoids prompts at a bad moment)
         public Task SmartCheckDriver() => _driverInstaller.SmartCheckDriver();
 
-        // ★★★ [新增] 动态刷新硬件配置 (热切换) ★★★
+        // Switch hardware groups on the fly
         public void RefreshHardwareConfig()
         {
-            // 1. 计算期望状态
+            // 1. Wanted state
             bool targetState = ShouldEnableController();
 
-            // 2. 检查当前状态 (无需加锁，bool读写原子且 IsControllerEnabled 只是个属性)
+            // 2. Current state (a plain bool property)
             bool currentState = _computer.IsControllerEnabled;
 
-            // 3. 如果状态一致，无需操作
+            // 3. Nothing to do
             if (targetState == currentState) return;
 
-            // ★★★ [需求变更] 关闭风扇/水泵不需要重载，仅首次开启时重载 ★★★
-            // 避免关闭监控项时触发重载导致软件短暂卡顿或设备重连
-            // 如果当前已开启 (true) 且目标是关闭 (false)，则保持开启状态，不执行重载
+            // Switching fans / pumps off does not reload (only the first switch-on does),
+            // so hiding an item never stalls the app or reconnects devices.
             if (currentState && !targetState)
             {
                 System.Diagnostics.Debug.WriteLine($"[HotSwap] Controller disable requested but ignored to avoid reload (Latch Mode).");
                 return;
             }
 
-            // 4. 状态变更 (False -> True)，触发异步重载
+            // 4. Off -> on: reload in the background
             System.Diagnostics.Debug.WriteLine($"[HotSwap] Controller State Change: {currentState} -> {targetState}");
 
-            // Fire-and-forget 异步任务，避免阻塞 UI
+            // Fire and forget (does not block the UI)
             Task.Run(() =>
             {
-                // 更新配置属性
+                // Update the setting
                 _computer.IsControllerEnabled = targetState;
 
-                // 触发安全重载
-                // 由于 ReloadComputerSafe 全程持有 _lock，
-                // 而 UpdateAll 和 GetValue 都改用了 TryEnter，
-                // 所以这里会独占 _lock 几秒钟，期间 UI 不会卡死（只会显示空数据）。
+                // Reload safely.
+                // ReloadComputerSafe holds _lock throughout, and UpdateAll / GetValue use TryEnter,
+                // so the panel just shows empty values for a few seconds instead of freezing.
                 ReloadComputerSafe();
             });
         }
@@ -165,28 +161,28 @@ namespace WinMonitor.Services
         {
             if (_isOpening) return;
 
-            // [Fix #290] 标记是否需要触发重载（因硬件变更或故障）
+            // Reload needed (hardware changed or failed)
             bool needsReload = false;
 
             try
             {
-                // 1. 更新计时器
+                // 1. Timers
                 double timeDelta = UpdateTiming();
 
-                // 2. 计算更新需求
+                // 2. What needs updating
                 var requirements = CheckUpdateRequirements();
 
                 _valueProvider.OnUpdateTickStarted();
 
                 lock (_lock)
                 {
-                    // 每十分钟兜底重建后，同步取值缓存，避免继续使用旧传感器对象。
+                    // After the 10-minute safety rebuild, refresh the value cache so old sensor objects are not used.
                     if (_sensorMap.EnsureFresh(_computer, _cfg))
                         _valueProvider.PreCacheAllSensors(_sensorMap);
 
-                    // 3秒一次 (慢速扫描)
+                    // every 3 s (slow scan)
                     bool isSlowScanTick = (_secondsCounter % 3 == 0); 
-                    // 10秒一次 (磁盘后台扫描)
+                    // every 10 s (background disk scan)
                     bool needDiskBgScan = (_secondsCounter % 10 == 0);
                     bool repairGpuMapAfterLoop = false;
 
@@ -194,7 +190,7 @@ namespace WinMonitor.Services
                     {
                         if (hw.HardwareType == HardwareType.Cpu && requirements.NeedCpu) { hw.Update(); continue; }
                         
-                        // [Fix #290] 显卡防闪退保护：双显卡切换时 Update 可能抛出异常
+                        // GPU switching on hybrid laptops can make Update throw
                         if (IsGpu(hw) && requirements.NeedGpu) 
                         { 
                             if (!requirements.ForceAll && !ShouldUpdateGpuHardware(hw)) continue;
@@ -217,7 +213,7 @@ namespace WinMonitor.Services
 
                         if (hw.HardwareType == HardwareType.Network && requirements.NeedNet)
                         {
-                            // ★★★ 修复：使用正确的 timeDelta，而不是 requirements.TimeDelta (它是0) ★★★
+                            // use the real time delta (requirements.TimeDelta is 0 here)
                             _networkManager.ProcessUpdate(hw, _cfg, timeDelta, isSlowScanTick);
                             continue;
                         }
@@ -227,12 +223,10 @@ namespace WinMonitor.Services
                             continue;
                         }
                         
-                        // 递归更新主板 (Motherboard / SuperIO)
+                        // Motherboard / SuperIO (recursive)
                         if (IsMoboOrCooler(hw) && requirements.NeedMobo)
                         {
-                             // ★★★ [优化] 降低更新频率：主板传感器每 3 秒更新一次，减少 I/O 阻塞 ★★★
-                             // [Fix] 无论是否 ForceAll (WebServer)，只要是 SuperIO 这种慢速设备，
-                             // 都必须强制跟随慢速扫描周期 (isSlowScanTick)，禁止高频更新。
+                             // Slow devices like SuperIO update every 3 s at most (less I/O blocking),
                              if (isSlowScanTick)
                              {
                                  UpdateWithSubHardware(hw);
@@ -247,26 +241,26 @@ namespace WinMonitor.Services
                     }
                 }
                 
-                // 任务错峰执行 (调用 SystemOptimizer)
+                // Spread-out maintenance (SystemOptimizer)
                 SystemOptimizer.RunMaintenanceTasks(_secondsCounter);
                 
                 OnValuesUpdated?.Invoke();
             }
             catch { }
 
-            // [Fix #290] 硬件故障自动恢复
-            // 如果检测到 GPU 丢失或驱动崩溃，触发安全重载以刷新硬件列表
+            // Recover from hardware failures:
+            // a lost GPU or crashed driver triggers a safe reload
             if (needsReload && !_isReloading)
             {
                 _isReloading = true;
                 System.Diagnostics.Debug.WriteLine("[HardwareMonitor] Hardware change detected, triggering reload...");
                 
-                // 异步延迟重载，给硬件切换留出缓冲时间
+                // Reload a little later so the hardware can settle
                 Task.Run(async () => 
                 {
                     try
                     {
-                        await Task.Delay(2000); // 等待 2秒让系统硬件列表稳定
+                        await Task.Delay(2000); // wait 2 s for the hardware list to settle
                         ReloadComputerSafe();
                     }
                     finally
@@ -280,25 +274,25 @@ namespace WinMonitor.Services
 
         public void Dispose()
         {
-            // ★★★ 核心修复：加锁！防止与正在运行的 UpdateAll() 冲突 ★★★
+            // Lock, so this cannot run while UpdateAll is running
             lock (_lock)
             {
                 try 
                 {
-                    // 将 Close 操作放入锁内，确保此时 UpdateAll 不在运行
+                    // Close inside the lock
                     _computer.Close(); 
                 }
                 catch (Exception ex)
                 {
-                    // 吞掉关闭时的异常，防止弹窗报错困扰用户
+                    // Ignore errors while closing
                     System.Diagnostics.Debug.WriteLine($"Dispose Error: {ex.Message}");
                 }
             }
 
             _valueProvider.Dispose();
-            _perfCounterManager.Dispose(); // ★★★ [新增] 释放计数器资源 ★★★
+            _perfCounterManager.Dispose();
             _networkManager.ClearCache();
-            _diskManager.ClearCache(); // 漏掉的，补上
+            _diskManager.ClearCache();
         }
         #endregion
 
@@ -311,27 +305,27 @@ namespace WinMonitor.Services
                 _isOpening = true;
                 try
                 {
-                    // ★★★ [新增] 启动计数器预热 (不阻塞主 UI) ★★★
+                    // Warm up the counters (does not block the UI)
                     _perfCounterManager.InitializeAsync();
 
                     lock (_lock)
                     {
-                        // LHM 打开双 Nvidia 显卡时可能很慢。启动阶段 Get() 已改走性能计数器兜底，
-                        // 这里继续加锁只会让设置页等硬件树稳定，不会拖住 CPU/MEM/DISK 首屏数据。
+                        // Opening two NVIDIA GPUs can be slow. Get() falls back to performance counters meanwhile,
+                        // so this lock only holds the hardware tree steady for the settings page.
                         _computer.Open();
                         WarmUpMotherboardSensors();
                         WarmUpBatterySensors();
 
-                        // 仅在启用 GPU 监控或网页服务时预热显卡，确保延迟出现的传感器能进入映射。
+                        // Warm up GPUs only when GPU items are shown, so late sensors still get mapped.
                         _sensorMap.Rebuild(_computer, _cfg);
                         
-                        // ★★★ [新增] 静态化预热：将所有传感器对象存入 Provider 缓存 ★★★
+                        // Put every sensor object in the value cache
                         _valueProvider.PreCacheAllSensors(_sensorMap);
                     }
 
                     _isOpening = false;
 
-                    // 首轮缓存就绪后再做历史记录禁用和内存整理，避免延后第一屏数据。
+                    // After the first values: turn off sensor history and trim memory
                     _ = Task.Run(async () =>
                     {
                         await Task.Delay(3000);
@@ -341,7 +335,7 @@ namespace WinMonitor.Services
                             DisableSensorHistory();
                         }
 
-                        // 优化 T1：启动后大扫除
+                        // Clean up after startup
                         GC.Collect(2, GCCollectionMode.Forced, true, true);
                         SystemOptimizer.TrimWorkingSet();
                     });
@@ -357,11 +351,11 @@ namespace WinMonitor.Services
             });
         }
 
-        // ★★★ [新增] 动态判断是否需要开启控制器 ★★★
+        // Are controllers (fans / pumps) needed?
         private bool ShouldEnableController()
         {
-            // 检查是否开启了任何需要读取外部控制器的监控项。
-            // 主板温度走 Motherboard/SuperIO 硬件树，不应该因此打开 Controller 扫描。
+            // Any item that reads an external controller?
+            // Motherboard temperature uses the Motherboard / SuperIO tree, not controllers.
             if (_cfg.IsAnyEnabled("CPU.Fan")) return true;
             if (_cfg.IsAnyEnabled("CPU.Pump")) return true;
             if (_cfg.IsAnyEnabled("CASE.Fan")) return true;
@@ -370,8 +364,8 @@ namespace WinMonitor.Services
 
         private void WarmUpMotherboardSensors()
         {
-            // 主板硬件树本来就是常开。启动时预热一次，保证主板温度即使暂未显示，
-            // 也能在 SensorMap.Rebuild 阶段完成有效映射，后续打开显示项可直接读缓存。
+            // The motherboard tree is always on. Warm it up once so its temperature gets mapped
+            // by SensorMap.Rebuild even while hidden, and showing it later reads the cache.
             foreach (var hw in _computer.Hardware)
             {
                 if (IsMotherboardSensorHardware(hw))
@@ -384,8 +378,8 @@ namespace WinMonitor.Services
 
         private void WarmUpBatterySensors()
         {
-            // 电池传感器在新版硬件库中可能需要先 Update 才会稳定暴露数值。
-            // 只预热 Battery，避免恢复启动时全硬件 Update 带来的多显卡/磁盘卡顿。
+            // Battery sensors may need one Update before they report values.
+            // Only the battery is warmed up (a full update can stall with several GPUs / disks).
             foreach (var hw in _computer.Hardware)
             {
                 if (hw.HardwareType == HardwareType.Battery)
@@ -398,19 +392,19 @@ namespace WinMonitor.Services
 
         private double UpdateTiming()
         {
-            // 1. 统一心跳计数 (假设 UpdateAll 约 1秒调用一次)
+            // 1. Heartbeat (UpdateAll runs about once a second)
             _tickCounter++;
             
-            // 2. 计算精确时间差 (仅用于网速计算)
+            // 2. Exact time delta (for network speeds)
             DateTime now = DateTime.Now;
             double timeDelta = (now - _lastTrafficTime).TotalSeconds;
             _lastTrafficTime = now;
-            if (timeDelta > 5.0) timeDelta = 0; // 防止休眠唤醒后的数据突刺
+            if (timeDelta > 5.0) timeDelta = 0; // ignore spikes after sleep
 
-            // ★★★ [智能处理] 刷新率自适应逻辑 ★★★
-            // 无论 UpdateAll 是 300ms 调一次还是 2s 调一次，
-            // 我们都将时间累加，直到凑满 1秒，才增加 _secondsCounter。
-            // 这样后续的 % 60, % 600 逻辑就是基于"真实时间"，而非"调用次数"。
+            // Refresh-rate independent timing:
+            // whether UpdateAll runs every 300 ms or every 2 s,
+            // time is added up and _secondsCounter only grows per real second,
+            // so the % 60 / % 600 checks follow real time, not call counts.
             _secondAccumulator += timeDelta;
             while (_secondAccumulator >= 1.0)
             {
@@ -423,37 +417,37 @@ namespace WinMonitor.Services
 
         private (bool ForceAll, bool NeedCpu, bool NeedGpu, bool NeedMem, bool NeedNet, bool NeedDisk, bool NeedBat, bool NeedMobo, double TimeDelta) CheckUpdateRequirements()
         {
-            // === [优化开始] 精细化判断更新需求 ===
+            // === What needs updating ===
         
-            // 1. 获取计数器状态
+            // 1. Counter state
             bool useCounter = _cfg.UseWinPerCounters && _perfCounterManager.IsInitialized;
             
-            // [Cleanup] the web display (which needed every sensor) is gone; only enabled items are read
+            // the web display (which needed every sensor) is gone; only enabled items are read
             bool forceAll = false;
 
-            // 2. CPU: 总是需要 (因为 LHM 要读温度)
+            // 2. CPU: always (temperatures come from LibreHardwareMonitor)
             bool needCpu = forceAll || _cfg.IsAnyEnabled("CPU");
             
-            // 3. 显卡: 总是需要
+            // 3. GPU: always
             bool needGpu = forceAll || _cfg.IsAnyEnabled("GPU");
             
-            // 4. ★★★ [优化 1] 内存: 如果走了计数器，就不需要 LHM 轮询了 ★★★
+            // 4. Memory: not needed when the counters provide it
             bool needMem = forceAll || (_cfg.IsAnyEnabled("MEM") && !useCounter);
             
-            // 5. 网络: 保持不变
+            // 5. Network: unchanged
             bool needNet = forceAll || _cfg.IsAnyEnabled("NET") || _cfg.IsAnyEnabled("DATA");
             
-            // 7. 电池: 只有在开启时才更新
+            // 7. Battery: only when shown
             bool needBat = forceAll || _cfg.IsAnyEnabled("BAT");
 
-            // 6. ★★★ [优化 2] 磁盘: 智能判断 ★★★
-            // 只有当 (没开计数器 OR 指定了特定盘 OR 需要看温度) 时，才需要 LHM 介入
+            // 6. Disks:
+            // only when counters are off, a disk is chosen, or temperature is shown
             bool needDiskTemp = _cfg.IsAnyEnabled("DISK.Temp");
             bool hasSpecificDisk = !string.IsNullOrEmpty(_cfg.PreferredDisk);
             bool needDiskSpeed = _cfg.IsAnyEnabled("DISK") && (!useCounter || hasSpecificDisk);
             bool needDisk = forceAll || needDiskSpeed || needDiskTemp;
 
-            // 判断主板更新需求
+            // Motherboard
             bool needMobo = forceAll ||
                 _cfg.IsAnyEnabled("MOBO") ||
                 _cfg.IsAnyEnabled("CPU.Fan") ||
@@ -469,7 +463,7 @@ namespace WinMonitor.Services
             {
                 lock (_lock)
                 {
-                    // 1. 清理业务缓存
+                    // 1. Clear value caches
                     _networkManager.ClearCache();
                     _diskManager.ClearCache();
                     _sensorMap.Clear();
@@ -477,19 +471,19 @@ namespace WinMonitor.Services
                     
                     _valueProvider.ClearCache();
                     
-                    // 清理扫描器缓存
+                    // Clear scanner caches
                     HardwareScanner.ClearCache();
 
-                    // 2. 清理字符串池
+                    // 2. Clear the string pool
                     UIUtils.ClearStringPool();
 
-                    // 3. 关闭旧硬件服务
+                    // 3. Close the old hardware
                     if (_computer != null)
                     {
                         _computer.Accept(new HardwareVisitor(h => { }));
                         _computer.Close();
-                        // ★★★ 核心修复：手动清空硬件列表 ★★★
-                        // LHM 的 Close() 不会清空列表，必须手动 Clear，否则再次 Open 会追加重复硬件
+                        // Clear the hardware list by hand:
+                        // LibreHardwareMonitor's Close() keeps it, so opening again would add duplicates
                         _computer.Hardware.Clear();
                     }
                     
@@ -499,12 +493,12 @@ namespace WinMonitor.Services
 
                     DisableSensorHistory();
 
-                    // 建图包含显卡更新，必须与正常采集、硬件关闭保持在同一把锁内。
+                    // Building the map updates GPUs, so it must hold the same lock as reading and closing.
                     _sensorMap.Rebuild(_computer, _cfg);
                     _valueProvider.PreCacheAllSensors(_sensorMap);
                 }
 
-                // 4. 优化 T1：重置后再次修剪内存
+                // 4. Trim memory again after a reset
                 GC.Collect();
                 SystemOptimizer.TrimWorkingSet();
             }
@@ -532,7 +526,7 @@ namespace WinMonitor.Services
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Debug.WriteLine($"[DriverInstaller] 释放硬件监控失败: {ex.Message}");
+                        System.Diagnostics.Debug.WriteLine($"[DriverInstaller] could not release the sensors: {ex.Message}");
                     }
                 }
             }
@@ -540,8 +534,8 @@ namespace WinMonitor.Services
         }
 
         // =========================================================
-        // ★★★ 核心修复：禁用所有传感器的历史记录 ★★★
-        // 这将阻止 LibreHardwareMonitor 在内存中保留 24 小时的数据缓存
+        // Turn off sensor history:
+        // stops LibreHardwareMonitor keeping 24 hours of values in memory
         // =========================================================
         private void DisableSensorHistory()
         {
@@ -549,7 +543,7 @@ namespace WinMonitor.Services
             catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[MemoryFix] Failed: {ex.Message}"); }
         }
 
-        // 递归更新子硬件，确保 SuperIO 刷新
+        // Update sub-hardware too (refreshes SuperIO)
         private void UpdateWithSubHardware(IHardware hw)
         {
             hw.Update();
@@ -568,13 +562,13 @@ namespace WinMonitor.Services
             var activeGpu = _sensorMap.CachedGpu;
             if (activeGpu == null) return true;
 
-            // 用户手动选择首选显卡时，严格只刷新该显卡，避免改变既有行为。
+            // A preferred GPU: update only that one (as before).
             if (_sensorMap.HasExplicitGpuSelection)
             {
                 return ReferenceEquals(hw, activeGpu);
             }
 
-            // 自动模式下，除默认显卡外，也刷新实际承载 GPU.* 指标的硬件。
+            // Automatic: update the default GPU and any other GPU that provides GPU.* values.
             return ReferenceEquals(hw, activeGpu) || _sensorMap.IsMappedGpuSensorHardware(hw);
         }
 
@@ -656,9 +650,9 @@ namespace WinMonitor.Services
         #endregion
 
         #region Inner Visitors
-        // ★★★ 核心修复：禁用所有传感器的历史记录 ★★★
+        // Turn off sensor history
         /// <summary>
-        /// 专用访问器：将所有 Sensor 的 ValuesTimeWindow 设为 0
+        /// Sets every sensor's ValuesTimeWindow to 0
         /// </summary>
         private class DisableHistoryVisitor : IVisitor
         {
@@ -670,8 +664,8 @@ namespace WinMonitor.Services
             }
             public void VisitSensor(ISensor sensor)
             {
-                // ★ 关键：通过反射设置 ValuesTimeWindow = TimeSpan.Zero
-                // 因为 ISensor 接口通常不暴露这个属性，它属于具体的 Sensor 类
+                // ValuesTimeWindow = TimeSpan.Zero, via reflection
+                // (ISensor does not expose it; it is on the concrete Sensor class)
                 try
                 {
                     var prop = sensor.GetType().GetProperty("ValuesTimeWindow");
@@ -682,7 +676,7 @@ namespace WinMonitor.Services
             public void VisitParameter(IParameter parameter) { }
         }
 
-        // 内部 Visitor 类，用于触发 LHM 清理逻辑
+        // Visitor that applies it
         private class HardwareVisitor : IVisitor
         {
             private readonly Action<IHardware> _action;

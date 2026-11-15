@@ -7,7 +7,7 @@ namespace WinMonitor
 {
     public class Settings
     {
-        // ====== 基础设置 ======
+        // ====== Basics ======
         public string Skin { get; set; } = "System";   // System (follow Windows), Light or Dark
         public bool TopMost { get; set; } = false;
         public bool AutoStart { get; set; } = false;
@@ -15,62 +15,59 @@ namespace WinMonitor
         public double AnimationSpeed { get; set; } = 0.35;
         public ScreenPoint Position { get; set; } = new ScreenPoint(-1, -1);
 
-        // ====== 界面与行为 ======
+        // ====== Panel and behaviour ======
         public double Opacity { get; set; } = 0.85;
         public bool ClickThrough { get; set; } = false;
-        public bool AutoHide { get; set; } = true;
         public bool ClampToScreen { get; set; } = true;
         public int PanelWidth { get; set; } = 240;
         public double UIScale { get; set; } = 1.0;
 
-        // ====== 硬件相关 ======
+        // ====== Hardware ======
         public string PreferredNetwork { get; set; } = "";
         public string LastAutoNetwork { get; set; } = "";
         public string PreferredDisk { get; set; } = "";
         public string LastAutoDisk { get; set; } = "";
         public string PreferredGpu { get; set; } = "";
         
-        // ★★★ [新增] 首选风扇 ★★★
+        // Preferred fan sensors
         public string PreferredCpuFan { get; set; } = "";
-        public string PreferredCpuPump { get; set; } = ""; // 保存用户选的水冷接口
+        public string PreferredCpuPump { get; set; } = ""; // the user's pump sensor
         public string PreferredCaseFan { get; set; } = "";
         public string PreferredMoboTemp { get; set; } = "";
         
-        // 主窗体所在的屏幕设备名 (用于记忆上次位置)
+        // Monitor the panel was on (to restore its position)
         public string ScreenDevice { get; set; } = "";
 
-        // [Cleanup] taskbar mode removed
         public bool HideMainForm { get; set; } = false;
         public bool HideTrayIcon { get; set; } = false;
 
-        // ★★★ [新增] 横条/桌面模式 间距配置 ★★★
 
-        // 双击动作配置
+        // Double-click action
         public int MainFormDoubleClickAction { get; set; } = 2;   // 1 Task Manager, 2 Settings, 5 nothing
 
-        // 内存/显存显示模式
+        // Memory / video memory display mode
         public int MemoryDisplayMode { get; set; } = 1;
 
-        // ★ 2. 运行时缓存：存储探测到的总容量 (GB)
+        // Runtime cache: detected total size (GB)
         [JsonIgnore] public static float DetectedRamTotalGB { get; set; } = 0;
         [JsonIgnore] public static float DetectedGpuVramTotalGB { get; set; } = 0;
 
-        // 开启后：CPU使用率、CPU频率、内存占用、磁盘读写 将优先从 Windows 计数器读取
+        // On: CPU usage, CPU clock, memory and disk speed come from Windows performance counters first
         public bool UseWinPerCounters { get; set; } = true;
 
-        // ★★★ [新增] 忽略 SMB (局域网文件传输) 流量 ★★★
+        // Leave out SMB (local network file sharing) traffic
         public bool IgnoreSmbTraffic { get; set; } = true;
         
-        // ====== 记录与报警 ======
+        // ====== Records and alerts ======
         public float RecordedMaxCpuPower { get; set; } = 65.0f;
         public float RecordedMaxCpuClock { get; set; } = 4200.0f;
         public float RecordedMaxGpuPower { get; set; } = 100.0f;
         public float RecordedMaxGpuClock { get; set; } = 1800.0f;
         
 
-        // ★★★ [新增] 风扇最大值记录 ★★★
+        // Recorded fan maximums
         public float RecordedMaxCpuFan { get; set; } = 4000;
-        public float RecordedMaxCpuPump { get; set; } = 5000; // 水冷最大转速 (用于百分比计算)
+        public float RecordedMaxCpuPump { get; set; } = 5000; // pump maximum (for the percentage)
         public float RecordedMaxGpuFan { get; set; } = 3500;
         public float RecordedMaxChassisFan { get; set; } = 3000;
 
@@ -93,16 +90,16 @@ namespace WinMonitor
         // show the "WinMonitor" title at the top of the panel
         public bool ShowTitle { get; set; } = true;
 
-        // [Halo] seconds between wireless device battery checks
+        // seconds between wireless device battery checks
         public int HaloPollSeconds { get; set; } = 20;
         public bool HaloPsBluetoothFullMode { get; set; } = false;   // Halo's "PlayStation over Bluetooth: full mode"
 
-        // [Halo] low battery alert for wireless devices (like the temperature alert)
+        // low battery alert for wireless devices (like the temperature alert)
         public bool AlertBatteryEnabled { get; set; } = true;
         public int AlertBatteryThreshold { get; set; } = 20;
         public List<MonitorItemConfig> MonitorItems { get; set; } = new List<MonitorItemConfig>();
 
-        // ★★★ 核心修复：添加全局保存锁，防止重置时被自动保存覆盖 ★★★
+        // Blocks every save (used while resetting, so nothing writes the old settings back)
         [JsonIgnore]
         public static bool GlobalBlockSave 
         { 
@@ -110,37 +107,32 @@ namespace WinMonitor
             set => SettingsHelper.GlobalBlockSave = value; 
         }
 
-        // ★★★ 优化 2：全局单例引用 ★★★
+        // The single shared instance
         private static Settings _instance;
 
-        // ★★★ 优化 3：改造 Load 方法为单例模式 ★★★
+        // Loads once, then returns the same instance
         public static Settings Load(bool forceReload = false)
         {
-            // 如果单例已存在且不强制刷新，直接返回内存对象 (0 IO, 0 GC)
+            // Already loaded: no file access
             if (_instance != null && !forceReload) return _instance;
 
-            // 委托给 SettingsHelper 加载
+            // Load through SettingsHelper
             _instance = SettingsHelper.Load(forceReload);
 
             return _instance;
         }
 
-        public Settings DeepClone()
-        {
-            var json = System.Text.Json.JsonSerializer.Serialize(this);
-            return System.Text.Json.JsonSerializer.Deserialize<Settings>(json) ?? new Settings();
-        }
     }
 
     public class MonitorItemConfig
     {
-        // ★★★ 核心优化：使用字符串驻留池解决内存浪费 ★★★
+        // Shared string pool, so keys are not duplicated in memory
         private string _key = "";
 
-        // 极简缓存：复用首个实例作为原型 (0 GC)
+        // Caches the first instance as a template
         private static readonly ConcurrentDictionary<string, MonitorItemConfig> _protoCache = new ConcurrentDictionary<string, MonitorItemConfig>();
 
-        // [Optimization] Cache keys to avoid string concatenation in hot paths
+        // Cache keys to avoid string concatenation in hot paths
         [JsonIgnore] public string CachedPropLabelKey { get; private set; } = "";
         [JsonIgnore] public string CachedPropShortLabelKey { get; private set; } = "";
         [JsonIgnore] public string CachedUIGroup { get; private set; } = "";
@@ -158,7 +150,7 @@ namespace WinMonitor
                 if (_key == k) return;
                 _key = k;
 
-                // 极简模式：直接从缓存的原型对象拷贝所有属性，无需额外对象分配
+                // Copy everything from the cached template (no extra allocations)
                 if (_protoCache.TryGetValue(k, out var p))
                 {
                     CachedPropLabelKey = p.CachedPropLabelKey;
@@ -171,7 +163,7 @@ namespace WinMonitor
                     return;
                 }
 
-                // 首次计算
+                // First time: compute
                 CachedPropLabelKey = UIUtils.Intern("PROP.Label." + _key);
                 CachedPropShortLabelKey = UIUtils.Intern("PROP.ShortLabel." + _key);
                 CachedItemsKey = UIUtils.Intern("Items." + _key);
@@ -190,31 +182,31 @@ namespace WinMonitor
                 
                 CachedGroupsKey = UIUtils.Intern("Groups." + CachedUIGroup);
                 
-                // 存入缓存
+                // Cache it
                 _protoCache[k] = this;
             }
         }
-        // ★★★ [优化] 分离用户配置与系统动态值 ★★★
-        // UserLabel: 用户手动设置的名称 (持久化)。为空表示跟随系统。
+        // User settings vs live values:
+        // UserLabel: name set by the user (saved). Empty = automatic.
         public string UserLabel { get; set; } = ""; 
         // Short label in the horizontal mode (" " = no label). The JSON name is kept from the
         // removed taskbar mode, so existing settings keep their short labels.
         public string TaskbarLabel { get; set; } = "";
 
-        // DynamicLabel: 插件运行时计算的名称 (不持久化)。
+        // DynamicLabel: name worked out at runtime (not saved).
         [JsonIgnore]
         public string DynamicLabel { get; set; } = "";
 
-        // DisplayLabel: 最终显示名称 (优先显示用户设置，否则显示动态值)
+        // DisplayLabel: the user's name if set, otherwise the live one
         [JsonIgnore]
         public string DisplayLabel => !string.IsNullOrEmpty(UserLabel) ? UserLabel : DynamicLabel;
 
-        // ★★★ [新增] 自定义单位配置 ★★★
-        // null/"Auto" = 自动(默认), "" = 不显示, "{u}/s" = 自定义格式
+        // Custom unit
+        // null/"Auto" = automatic (default), "" = none, "{u}/s" = custom format
         public string UnitPanel { get; set; } = null; 
         public bool VisibleInPanel { get; set; } = true;
 
-        // [Bars] draw the bar under this item (only matters when HasBar)
+        // draw the bar under this item (only matters when HasBar)
         public bool ShowBar { get; set; } = true;
 
         /// <summary>[Bars] Whether the panel draws a bar for this item: the Dashboard, network,
@@ -224,15 +216,14 @@ namespace WinMonitor
 
         public int SortIndex { get; set; } = 0;
 
-        // ★★★ 新增：统一的分组属性 ★★★
-        // 所有界面（主界面、设置页、菜单）都统一调用这个属性来决定它属于哪个组
-        // 从而避免了在 UI 代码里到处写 if else
+        // The group an item belongs to
+        // Used everywhere (panel, settings, menus), so the rule lives in one place
         [JsonIgnore]
         public string UIGroup 
         {
             get 
             {
-                // [Optimization] Return cached value if available
+                // Return cached value if available
                 if (!string.IsNullOrEmpty(CachedUIGroup)) return CachedUIGroup;
 
                 // Fallback for uninitialized state (should be rare)

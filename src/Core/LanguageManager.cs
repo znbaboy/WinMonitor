@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
@@ -10,7 +10,7 @@ namespace WinMonitor.Core
         public static string CurrentLang { get; private set; } = "zh";
         private static Dictionary<string, string> _texts = new();
 
-        // ★★★ 1. 新增：用户自定义覆盖字典 ★★★
+        // User overrides (renamed items and groups) win over the language file
         private static Dictionary<string, string> _overrides = new();
 
         private static string LangDir
@@ -25,8 +25,8 @@ namespace WinMonitor.Core
 
         public static void Load(string langCode)
         {
-            // [优化] 如果请求的语言与当前已加载语言一致，且字典不为空，则跳过加载
-            // 使用 OrdinalIgnoreCase 忽略大小写差异 (如 "zh" vs "ZH")
+            // Skip reloading when the requested language is already loaded
+            // (case-insensitive, e.g. "en" vs "EN")
             if (string.Equals(CurrentLang, langCode, StringComparison.OrdinalIgnoreCase) && _texts.Count > 0)
             {
                 return;
@@ -51,7 +51,7 @@ namespace WinMonitor.Core
             }
         }
 
-        // ★★★ 2. 新增：注入/清除覆盖的方法 ★★★
+        // Inject / clear user overrides
         public static void SetOverride(string key, string value)
         {
             if (string.IsNullOrEmpty(key)) return;
@@ -67,32 +67,32 @@ namespace WinMonitor.Core
 
         public static void ClearOverrides() => _overrides.Clear();
 
-        // [新增] 获取原始翻译值（这是基础逻辑）
+        // The language file's text for a key, ignoring user overrides
         public static string GetOriginal(string key)
         {
-            // 1. 查原始字典
+            // 1. Language file
             if (_texts.TryGetValue(key, out var val)) return val;
 
-            // 2. 没找到则回退到 Key 的后缀
+            // 2. Not found: fall back to the last part of the key
             int dot = key.IndexOf('.');
             return dot >= 0 ? key[(dot + 1)..] : key;
         }
         public static string T(string key)         
         {
-            // 1. 优先检查用户自定义覆盖
+            // 1. A user override wins
             if (_overrides.TryGetValue(key, out var overrideVal)) return UIUtils.Intern(overrideVal);
 
-            // 2. 没有覆盖，就直接复用基础逻辑并驻留结果
+            // 2. Otherwise the language file's text (interned)
             return UIUtils.Intern(GetOriginal(key));
         }
 
-        // ★★★ 优化: Intern 驻留 Key 字符串，防止 Items.CPU.XXX 重复 ★★★
+        // Intern keys so strings like Items.CPU.Load are not duplicated
         private static Dictionary<string, string> Flatten(JsonElement element, string prefix = "")
         {
             var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var prop in element.EnumerateObject())
             {
-                // 同样驻留 Key
+                // Intern the key here too
                 string fullKey = string.IsNullOrEmpty(prefix) ? prop.Name : $"{prefix}.{prop.Name}";
                 if (prop.Value.ValueKind == JsonValueKind.Object)
                 {

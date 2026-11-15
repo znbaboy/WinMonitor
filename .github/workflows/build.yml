@@ -69,7 +69,5 @@ jobs:
           tag_name: ${{ inputs.release || github.ref_name }}
           name: WinMonitor ${{ inputs.release || github.ref_name }}
           target_commitish: ${{ github.sha }}
-          generate_release_notes: true
-          body: |
-            Portable: unzip anywhere and run `WinMonitor.exe` (asks for administrator rights, needed to read sensors). No install needed; settings stay in the folder.
+          body_path: RELEASE_NOTES.md
           files: WinMonitor-portable-x64.zip

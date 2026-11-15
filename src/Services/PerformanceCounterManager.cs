@@ -6,50 +6,50 @@ using System.Threading.Tasks;
 namespace WinMonitor.Services
 {
     /// <summary>
-    /// Windows 性能计数器统一管理器
-    /// <para>负责管理所有基于 System.Diagnostics.PerformanceCounter 的系统级监控指标。</para>
-    /// <para>优势：比 LHM 更快、更准（尤其是 CPU 频率和内存占用），且不占用硬件总线。</para>
+    /// Windows performance counters
+    /// <para>System metrics read through System.Diagnostics.PerformanceCounter.</para>
+    /// <para>Faster and closer to Task Manager than LibreHardwareMonitor (CPU clock, memory) and does not touch the hardware bus.</para>
     /// </summary>
     public class PerformanceCounterManager : IDisposable
     {
-        // --- 核心计数器实例 ---
-        private PerformanceCounter? _cpuLoadCounter;      // CPU 总使用率 (含内核时间)
-        private PerformanceCounter? _cpuActualFreqCounter; // CPU 实际频率 (MHz)
-        private PerformanceCounter? _cpuProcessorFreqCounter; // CPU 处理器频率 (MHz)
-        private PerformanceCounter? _cpuFreqCounter;      // CPU 性能百分比 (用于计算频率)
-        private PerformanceCounter? _ramAvailableCounter; // 可用内存 (MB)
-        private PerformanceCounter? _diskReadCounter;     // 磁盘总读取速度
-        private PerformanceCounter? _diskWriteCounter;    // 磁盘总写入速度
-        private PerformanceCounter? _diskActiveCounter;   // 磁盘活动时间 (%)
-        private PerformanceCounter? _uptimeCounter;       // 系统运行时间
+        // --- Counters ---
+        private PerformanceCounter? _cpuLoadCounter; // CPU usage (incl. kernel time)
+        private PerformanceCounter? _cpuActualFreqCounter; // CPU actual frequency (MHz)
+        private PerformanceCounter? _cpuProcessorFreqCounter; // CPU processor frequency (MHz)
+        private PerformanceCounter? _cpuFreqCounter; // CPU performance % (to work out the clock)
+        private PerformanceCounter? _ramAvailableCounter; // available memory (MB)
+        private PerformanceCounter? _diskReadCounter; // disk read speed (all disks)
+        private PerformanceCounter? _diskWriteCounter; // disk write speed (all disks)
+        private PerformanceCounter? _diskActiveCounter; // disk active time (%)
+        private PerformanceCounter? _uptimeCounter; // system uptime
 
-        // --- SMB 计数器 (用于忽略内网流量) ---
-        // 经过探测发现，SMB Client Shares 经常缺失，而 Redirector (RDR) 和 Server 是更底层的组件
-        // Redirector = 客户端流量 (我访问别人)
-        // Server = 服务端流量 (别人访问我)
-        // 这些通常是 SingleInstance 计数器，实例名为空字符串 ""
+        // --- SMB counters (to leave out local network traffic) ---
+        // SMB Client Shares is often missing; Redirector and Server are lower-level and reliable:
+        // Redirector = client traffic (I access others)
+        // Server = server traffic (others access me)
+        // These are single-instance counters (instance name "")
         private PerformanceCounter? _smbClientReadCounter;
         private PerformanceCounter? _smbClientWriteCounter;
         private PerformanceCounter? _smbServerReadCounter;
         private PerformanceCounter? _smbServerWriteCounter;
 
-        // --- 静态基准数据 (启动时获取一次即可) ---
-        private float _cpuBaseFreq = 0;   // CPU 基准频率 (MHz)
-        private float _totalMemoryMB = 0; // 物理内存总量 (MB)
+        // --- Fixed values (read once) ---
+        private float _cpuBaseFreq = 0; // CPU base clock (MHz)
+        private float _totalMemoryMB = 0; // physical memory (MB)
 
         /// <summary>
-        /// 标记计数器是否已完成初始化和预热。
+        /// True once the counters are set up and warmed up.
         /// </summary>
         public bool IsInitialized { get; private set; } = false;
 
         /// <summary>
-        /// 获取检测到的物理内存总量 (GB)
+        /// Physical memory (GB)
         /// </summary>
         public float TotalMemoryGB => _totalMemoryMB / 1024f;
 
         /// <summary>
-        /// 异步初始化所有计数器。
-        /// <para>建议在程序启动时调用，运行在后台线程，避免阻塞 UI。</para>
+        /// Sets up all counters in the background.
+        /// <para>Call at startup; does not block the UI.</para>
         /// </summary>
         public void InitializeAsync()
         {
@@ -57,42 +57,42 @@ namespace WinMonitor.Services
             {
                 try
                 {
-                    // 1. 获取静态硬件信息 (总内存、基准频率)
+                    // 1. Fixed hardware values (memory, base clock)
                     InitStaticHardwareInfo();
 
-                    // 2. 创建计数器实例
-                    // 注意：CategoryName 即使在中文系统通常也支持英文，为了兼容性优先用英文
+                    // 2. Create the counters
+                    // English category names work on most localized systems too
                     
-                    // CPU 负载：使用 Processor Information 类别 (Win8+ 推荐)，兼容性更好
-                    // [Fix] 使用 "% Processor Utility" 而非 "% Processor Time"
-                    // 任务管理器在 Win8+ 显示的是 "Utility" (考虑睿频)，而非 "Time"
+                    // CPU usage: Processor Information (Windows 8+)
+                    // "% Processor Utility", not "% Processor Time":
+                    // Task Manager shows Utility (includes boost) on Windows 8+
                     _cpuLoadCounter = CreateCounter("Processor Information", "% Processor Utility", "_Total");
 
                     if (_cpuLoadCounter == null)
-                        _cpuLoadCounter = CreateCounter("Processor Information", "% Processor Time", "_Total"); // 回退1
+                        _cpuLoadCounter = CreateCounter("Processor Information", "% Processor Time", "_Total"); // fallback 1
 
                     if (_cpuLoadCounter == null) 
-                        _cpuLoadCounter = CreateCounter("Processor", "% Processor Time", "_Total"); // 旧系统回退
+                        _cpuLoadCounter = CreateCounter("Processor", "% Processor Time", "_Total"); // fallback for older Windows
 
-                    // CPU 频率：优先读取 Windows 直接频率，旧系统缺失时再走百分比换算
+                    // CPU clock: Windows' direct frequency first, else from the performance percentage
                     _cpuActualFreqCounter = CreateCounter("Processor Information", "Actual Frequency", "_Total");
                     _cpuProcessorFreqCounter = CreateCounter("Processor Information", "Processor Frequency", "_Total");
                     _cpuFreqCounter = CreateCounter("Processor Information", "% Processor Performance", "_Total");
                     if (_cpuFreqCounter == null) 
                         _cpuFreqCounter = CreateCounter("Processor", "% Processor Performance", "_Total");
 
-                    // 内存：只读取"可用内存"，通过 (总内存 - 可用) 计算占用，比直接读占用率更准
+                    // Memory: in use = total - available (more accurate than the load counter)
                     _ramAvailableCounter = CreateCounter("Memory", "Available MBytes");
 
-                    // 磁盘：读取物理磁盘总和 (_Total)
+                    // Disks: all physical disks (_Total)
                     _diskReadCounter = CreateCounter("PhysicalDisk", "Disk Read Bytes/sec", "_Total");
                     _diskWriteCounter = CreateCounter("PhysicalDisk", "Disk Write Bytes/sec", "_Total");
-                    _diskActiveCounter = CreateCounter("PhysicalDisk", "% Disk Time", "_Total"); // 任务管理器里的磁盘%
+                    _diskActiveCounter = CreateCounter("PhysicalDisk", "% Disk Time", "_Total"); // Task Manager's disk %
 
-                    // 系统：运行时间
+                    // System: uptime
                     _uptimeCounter = CreateCounter("System", "System Up Time");
 
-                    // SMB (内网流量)：使用 SMB Client/Server Shares 类别
+                    // SMB (local network traffic)
                     // Client: Read/Write Bytes/sec
                     _smbClientReadCounter = CreateCounter("SMB Client Shares", "Read Bytes/sec", "_Total");
                     _smbClientWriteCounter = CreateCounter("SMB Client Shares", "Write Bytes/sec", "_Total");
@@ -101,11 +101,11 @@ namespace WinMonitor.Services
                     _smbServerReadCounter = CreateCounter("SMB Server Shares", "Received Bytes/sec", "_Total");
                     _smbServerWriteCounter = CreateCounter("SMB Server Shares", "Sent Bytes/sec", "_Total");
 
-                    // 3. ★关键步骤★：预热 (Pre-warming)
-                    // PerformanceCounter 的机制是计算两次采样的时间差。
-                    // 第一次调用 NextValue() 永远返回 0。
-                    // 必须在这里先读一次，这样用户在 UI 上第一次看到数据时就是有值的。
-                    // [Fix] 使用 SafeRead 代替直接调用 NextValue，防止某个计数器崩溃导致整个初始化失败 (#268)
+                    // 3. Warm up:
+                    // counters compare two samples,
+                    // so the first NextValue() is always 0.
+                    // Read once here so the first values shown are real.
+                    // SafeRead: one broken counter must not stop the rest
                     
                     SafeRead(_cpuLoadCounter);
                     SafeRead(_cpuActualFreqCounter);
@@ -126,14 +126,14 @@ namespace WinMonitor.Services
                 }
                 catch
                 {
-                    // 初始化失败通常是因为系统组件损坏 (如精简版 Windows)
-                    // 这里只记录日志，IsInitialized 保持为 false，上层逻辑会自动回退到 LHM
+                    // Usually a damaged system component (e.g. stripped-down Windows):
+                    // IsInitialized stays false and LibreHardwareMonitor is used instead
                 }
             });
         }
 
         /// <summary>
-        /// 安全创建计数器的辅助方法
+        /// Creates a counter (null on failure)
         /// </summary>
         private PerformanceCounter? CreateCounter(string category, string counter, string instance = "")
         {
@@ -152,7 +152,7 @@ namespace WinMonitor.Services
 
         private void InitStaticHardwareInfo()
         {
-            // A. 获取 CPU 基准频率 (从注册表读取，比 WMI 快)
+            // A. CPU base clock (from the registry, faster than WMI)
             try
             {
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -166,10 +166,10 @@ namespace WinMonitor.Services
                 }
             }
             catch { }
-            // 兜底策略：如果读不到，设为 2.5GHz，防止除零错误
+            // Fallback 2.5 GHz (avoids dividing by zero)
             if (_cpuBaseFreq <= 0) _cpuBaseFreq = 2500; 
 
-            // B. 获取物理内存总量 (调用 Win32 API GlobalMemoryStatusEx)
+            // B. Physical memory (GlobalMemoryStatusEx)
             try
             {
                 MEMORYSTATUSEX memStatus = new MEMORYSTATUSEX();
@@ -179,18 +179,18 @@ namespace WinMonitor.Services
                 }
             }
             catch { }
-            // 兜底策略：默认 16GB
+            // Fallback 16 GB
             if (_totalMemoryMB <= 0) _totalMemoryMB = 16 * 1024;
         }
 
         // ==========================================
-        // 安全取值方法 (内部消化异常，失败返回 null)
+        // Safe reads (null on failure)
         // ==========================================
 
         public float? GetCpuLoad()
         {
             var val = SafeRead(_cpuLoadCounter);
-            // [Fix] Utility 计数器在睿频时可能超过 100%，需截断以匹配任务管理器行为
+            // Utility can exceed 100% while boosting: cap it like Task Manager
             return val > 100f ? 100f : val;
         }
 
@@ -206,7 +206,7 @@ namespace WinMonitor.Services
 
         private static float? ResolveCpuFrequency(float? processorFreq, float? percent, float registryFreq)
         {
-            // Processor Frequency 是标称频率，优先作为性能百分比的基准，不能直接覆盖动态频率。
+            // Processor Frequency is the nominal clock: the base for the performance percentage, not a live clock.
             float baseFreq = IsValidCpuFrequency(processorFreq) ? processorFreq!.Value : registryFreq;
             if (percent.HasValue)
             {
@@ -215,7 +215,7 @@ namespace WinMonitor.Services
                 return IsValidCpuFrequency(calculated) ? calculated : null;
             }
 
-            // 只有缺失性能计数器时才回退到标称值；异常采样返回空，由上层尝试硬件传感器。
+            // Nominal value only when the performance counter is missing; a bad sample returns null so the sensors are tried.
             return IsValidCpuFrequency(processorFreq) ? processorFreq : null;
         }
 
@@ -229,8 +229,8 @@ namespace WinMonitor.Services
         }
 
         /// <summary>
-        /// 获取内存数据。
-        /// 返回元组：(占用率%, 已用GB)
+        /// Memory values.
+        /// Returns (load %, used GB)
         /// </summary>
         public (float? Load, float? UsedGB) GetMemoryData()
         {
@@ -251,18 +251,15 @@ namespace WinMonitor.Services
         public float? GetUptime() => SafeRead(_uptimeCounter);
 
         /// <summary>
-        /// 获取本周期内估算的 SMB 流量增量 (含协议开销补偿)
+        /// Estimated SMB traffic since the last sample (with protocol overhead)
         /// </summary>
-        /// <param name="seconds">距离上次采样的秒数</param>
+        /// seconds since the last sample
         public (long UpBytes, long DownBytes) GetEstimatedSmbBytes(double seconds)
         {
             var rate = GetSmbTrafficRate();
 
-            // 增加 10% 的冗余系数，用于抵消 TCP/IP 协议头、SMB 协议头等开销
-            // 否则会出现 "下载 600MB 文件，仍显示有 30MB 流量" 的情况
-            // [Fix] 恢复 v1.2.8 的 1.1 系数。虽然理论上 1.0 更准确，但用户反馈 v1.2.8 有效而 v1.3.0 失效，
-            // 可能是因为 PerformanceCounter 的平均值滞后导致 1.0 扣不干净。
-            // [Update] 增加到 1.2 以更激进地扣除，防止剩余 10-20% 的流量
+            // A 1.2 factor covers TCP/IP and SMB headers and the counters' averaging lag;
+            // without it a 600 MB transfer could still show about 30 MB of traffic.
             const double OverheadFactor = 1.2;
 
             long up = (long)(rate.UpRate * seconds * OverheadFactor);
@@ -272,8 +269,8 @@ namespace WinMonitor.Services
         }
 
         /// <summary>
-        /// 获取当前内网 SMB 流量速率 (Client + Server)
-        /// <para>单位：Bytes/sec</para>
+        /// Current local network (SMB) rate (client + server)
+        /// <para>Bytes/sec</para>
         /// </summary>
         private (float UpRate, float DownRate) GetSmbTrafficRate()
         {
@@ -287,16 +284,16 @@ namespace WinMonitor.Services
             if (_smbClientReadCounter != null) down += (SafeRead(_smbClientReadCounter) ?? 0);
 
             // 2. Server
-            // Upload = Transmitted (别人下载我的文件)
+            // Upload = sent (others download from me)
             if (_smbServerWriteCounter != null) up += (SafeRead(_smbServerWriteCounter) ?? 0);
-            // Download = Received (别人传文件给我)
+            // Download = received (others send to me)
             if (_smbServerReadCounter != null) down += (SafeRead(_smbServerReadCounter) ?? 0);
 
             return (up, down);
         }
 
         /// <summary>
-        /// 包裹 try-catch 的读取，防止运行时因为系统组件重置导致的崩溃
+        /// Read with try/catch (a reset system component must not crash the app)
         /// </summary>
         private float? SafeRead(PerformanceCounter? pc)
         {
@@ -314,7 +311,7 @@ namespace WinMonitor.Services
 
         public void Dispose()
         {
-            // 释放所有计数器资源
+            // Dispose all counters
             _cpuLoadCounter?.Dispose();
             _cpuActualFreqCounter?.Dispose();
             _cpuProcessorFreqCounter?.Dispose();
@@ -325,14 +322,14 @@ namespace WinMonitor.Services
             _diskActiveCounter?.Dispose();
             _uptimeCounter?.Dispose();
             
-            // 释放 SMB 计数器
+            // Dispose the SMB counters
             _smbClientReadCounter?.Dispose();
             _smbClientWriteCounter?.Dispose();
             _smbServerReadCounter?.Dispose();
             _smbServerWriteCounter?.Dispose();
         }
 
-        // --- Win32 API 内存结构体定义 ---
+        // --- Win32 memory structure ---
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
         private class MEMORYSTATUSEX
         {

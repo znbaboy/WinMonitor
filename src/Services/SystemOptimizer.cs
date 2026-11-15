@@ -6,7 +6,7 @@ using WinMonitor.Core;
 namespace WinMonitor.Services
 {
     /// <summary>
-    /// 系统优化器：负责内存清理、性能修剪及后台维护任务
+    /// Memory trimming and background maintenance
     /// </summary>
     public static class SystemOptimizer
     {
@@ -16,7 +16,7 @@ namespace WinMonitor.Services
         #endregion
 
         /// <summary>
-        /// 修剪当前进程的工作集内存
+        /// Trims this process's working set
         /// </summary>
         /// <summary>Collects garbage and trims shortly after (e.g. when a window closed).</summary>
         public static void TrimSoon()
@@ -40,18 +40,18 @@ namespace WinMonitor.Services
         }
 
         /// <summary>
-        /// 执行定时维护任务 (流量保存、GC 优化、内存修剪)
+        /// Periodic maintenance (save traffic, collect garbage, trim memory)
         /// </summary>
-        /// <param name="secondsCounter">系统运行秒数计数器</param>
+        /// seconds since start
         public static void RunMaintenanceTasks(long secondsCounter)
         {
-            // 1. 流量保存: 每 60 秒 (Offset 5s: 避开整点)
+            // 1. Save traffic: every 60 s (at second 5)
             if (secondsCounter % 60 == 5)
             {
                 TrafficLogger.Save();
             }
 
-            // 2. 内存软清理: 每 180 秒 (Offset 30s)
+            // 2. Collect garbage: every 180 s (at second 30)
             if (secondsCounter % 180 == 30)
             {
                 GC.Collect(2, GCCollectionMode.Optimized);

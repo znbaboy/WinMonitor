@@ -12,7 +12,7 @@ namespace WinMonitor.UI
 {
     /// <summary>
     /// The floating panel: borderless, see-through corners, kept out of the taskbar and Alt+Tab.
-    /// Window behaviour (drag, clamp, auto-hide at screen edges, always on top, click-through,
+    /// Window behaviour (drag, clamp to screen, always on top, click-through,
     /// position memory) ported from LiteMonitor's MainForm helpers.
     /// </summary>
     internal sealed class PanelWindow : Window
@@ -25,7 +25,6 @@ namespace WinMonitor.UI
         public event Action? DoubleClicked;
 
         private readonly Settings _cfg;
-        private readonly DispatcherQueueTimer _autoHideTimer;
         private readonly DispatcherQueueTimer _topMostTimer;
         private readonly DispatcherQueueTimer _displayTimer;
 
@@ -33,13 +32,6 @@ namespace WinMonitor.UI
         private bool _pressed;
         private (int X, int Y) _dragCursor, _dragWindow;
         public bool IsDragging => _pressed;
-
-        // auto-hide
-        private enum Edge { None, Left, Right, Top }
-        private Edge _dock = Edge.None;
-        private bool _hidden;
-        private DateTime _keepVisibleUntil = DateTime.MinValue;
-        private const int HideStrip = 4, HideThreshold = 10, HoverBand = 30;
 
         private int _widthPx, _heightPx;
         private bool _clickThrough;
@@ -97,9 +89,6 @@ namespace WinMonitor.UI
             });
 
             var dq = DispatcherQueue;
-            _autoHideTimer = dq.CreateTimer();
-            _autoHideTimer.Interval = TimeSpan.FromMilliseconds(250);
-            _autoHideTimer.Tick += (_, _) => CheckAutoHide();
             _topMostTimer = dq.CreateTimer();
             _topMostTimer.Interval = TimeSpan.FromSeconds(10);
             _topMostTimer.Tick += (_, _) => { if (IsVisible) RefreshTopMost(false); };
@@ -132,12 +121,6 @@ namespace WinMonitor.UI
             View.Root.Opacity = Math.Clamp(_cfg.Opacity, 0.1, 1.0);
             SetClickThrough(_cfg.ClickThrough);
             RefreshTopMost(true);
-            if (_cfg.AutoHide) _autoHideTimer.Start();
-            else
-            {
-                _autoHideTimer.Stop();
-                if (_hidden) ForceShow();
-            }
         }
 
         public void RefreshTopMost(bool force)
@@ -223,7 +206,6 @@ namespace WinMonitor.UI
             StripFrame();
             Native.SetCorners(Hwnd, 1);   // Windows can restore the frame when the window is first shown
             RefreshTopMost(true);
-            KeepVisible(3);
         }
 
         public void HidePanel() => Native.ShowWindow(Hwnd, Native.SW_HIDE);
@@ -256,8 +238,6 @@ namespace WinMonitor.UI
                 y = Math.Max(area.Top, Math.Min(y, area.Bottom - b.Height));
             }
             Native.Move(Hwnd, x, y);
-            _hidden = false;
-            _dock = Edge.None;
         }
 
         private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
@@ -278,8 +258,6 @@ namespace WinMonitor.UI
         }
 
         // ------------------------------------------------------------------ position
-        public void KeepVisible(double seconds) => _keepVisibleUntil = DateTime.Now.AddSeconds(seconds);
-
         public void ClampToScreen(bool force)
         {
             if (!_cfg.ClampToScreen && !force) return;
@@ -295,7 +273,6 @@ namespace WinMonitor.UI
 
         public void SavePosition()
         {
-            if (_hidden) return;   // an edge-hidden panel keeps its last real position
             ClampToScreen(false);
             var b = Native.Bounds(Hwnd);
             _cfg.ScreenDevice = Native.ScreenFromPoint(b.Left + b.Width / 2, b.Top + b.Height / 2).DeviceName;
@@ -327,9 +304,6 @@ namespace WinMonitor.UI
             if (x + w > area.Right) x = area.Right - w;
             if (y + h > area.Bottom) y = area.Bottom - h;
             Native.Move(Hwnd, x, y);
-            _hidden = false;
-            _dock = Edge.None;
-            KeepVisible(0.5);
         }
 
         /// <summary>Moves the window so its centre stays put (used when switching layouts).</summary>
@@ -343,64 +317,6 @@ namespace WinMonitor.UI
             var b = Native.Bounds(Hwnd);
             Native.Move(Hwnd, c.X - b.Width / 2, c.Y - b.Height / 2);
             SavePosition();
-        }
-
-        // ------------------------------------------------------------------ auto-hide at screen edges
-        public void ForceShow()
-        {
-            if (_hidden)
-            {
-                _hidden = false;
-                _dock = Edge.None;
-                ClampToScreen(true);
-            }
-            KeepVisible(3);
-        }
-
-        private static bool OtherScreenAt(Native.Screen current, int x, int y) =>
-            Native.AllScreens().Any(s => s.DeviceName != current.DeviceName && s.Bounds.Contains(x, y));
-
-        private void CheckAutoHide()
-        {
-            if (!_cfg.AutoHide || !IsVisible || _pressed || PopupMenu.IsOpen) return;
-            if (DateTime.Now < _keepVisibleUntil) return;
-
-            var b = Native.Bounds(Hwnd);
-            var screen = Native.ScreenFromPoint(b.Left + b.Width / 2, b.Top + b.Height / 2);
-            var area = screen.WorkArea;
-            var c = Native.Cursor();
-
-            if (!_hidden)
-            {
-                // only edges with no other monitor behind them (otherwise the panel would land on that monitor)
-                int midX = b.Left + b.Width / 2, midY = b.Top + b.Height / 2;
-                bool nearLeft = b.Left <= area.Left + HideThreshold && !OtherScreenAt(screen, screen.Bounds.Left - 2, midY);
-                bool nearRight = area.Right - b.Right <= HideThreshold && !OtherScreenAt(screen, screen.Bounds.Right + 1, midY);
-                bool nearTop = b.Top <= area.Top + HideThreshold && !OtherScreenAt(screen, midX, screen.Bounds.Top - 2);
-                if ((nearLeft || nearRight || nearTop) && !b.Contains(c.X, c.Y))
-                {
-                    if (nearRight) { Native.Move(Hwnd, area.Right - HideStrip, b.Top); _dock = Edge.Right; }
-                    else if (nearLeft) { Native.Move(Hwnd, area.Left - (b.Width - HideStrip), b.Top); _dock = Edge.Left; }
-                    else { Native.Move(Hwnd, b.Left, area.Top - (b.Height - HideStrip)); _dock = Edge.Top; }
-                    _hidden = true;
-                }
-                return;
-            }
-
-            bool onStrip = _dock switch
-            {
-                Edge.Right => c.X >= area.Right - HideStrip && c.Y >= b.Top && c.Y <= b.Bottom,
-                Edge.Left => c.X <= area.Left + HideStrip && c.Y >= b.Top && c.Y <= b.Bottom,
-                Edge.Top => c.Y <= area.Top + HideStrip && c.X >= b.Left && c.X <= b.Right,
-                _ => false,
-            };
-            if (!onStrip) return;
-            if (_dock == Edge.Right && c.X >= area.Right - HoverBand) Native.Move(Hwnd, area.Right - b.Width, b.Top);
-            else if (_dock == Edge.Left && c.X <= area.Left + HoverBand) Native.Move(Hwnd, area.Left, b.Top);
-            else if (_dock == Edge.Top && c.Y <= area.Top + HoverBand) Native.Move(Hwnd, b.Left, area.Top);
-            else return;
-            _hidden = false;
-            _dock = Edge.None;
         }
     }
 }

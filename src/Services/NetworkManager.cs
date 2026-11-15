@@ -12,7 +12,7 @@ namespace WinMonitor.Services
 {
     public class NetworkManager
     {
-        // ★★★ [修复] 状态隔离：每个硬件拥有独立的网络状态，不再全局共享 ★★★
+        // State per adapter (not shared)
         private class NetworkState
         {
             public NetworkInterface? NativeAdapter;
@@ -20,30 +20,30 @@ namespace WinMonitor.Services
             public long LastNativeDownload;
             public DateTime LastMatchAttempt = DateTime.MinValue;
             
-            // 缓存 LHM 传感器
+            // LibreHardwareMonitor sensors
             public ISensor? CachedUpSensor;
             public ISensor? CachedDownSensor;
         }
         private readonly Dictionary<IHardware, NetworkState> _netStates = new();
         
-        // 网络智能缓存
+        // Selected adapter cache
         private IHardware? _cachedNetHw;
         private DateTime _lastNetScan = DateTime.MinValue;
-        private readonly DateTime _startTime = DateTime.Now; // 启动时间
-        private static string _staticIPCache = "";// [修改] 增加IP静态缓存，切换主题/重启服务时不丢失，解决闪烁问题
-        private static DateTime _lastIPCheckTime = DateTime.MinValue; // 上次检查IP的时间
-        private volatile bool _shouldResetAdapters = false; // [Fix #287] 网络变更标记
+        private readonly DateTime _startTime = DateTime.Now; // start time
+        private static string _staticIPCache = ""; // static IP cache, kept across reloads (no flicker)
+        private static DateTime _lastIPCheckTime = DateTime.MinValue; // last IP check
+        private volatile bool _shouldResetAdapters = false; // set when the network changed
 
-        // ★★★ 依赖注入：性能计数器 (用于获取 SMB 流量) ★★★
+        // Performance counters (for SMB traffic)
         private readonly PerformanceCounterManager _perfManager;
 
         public NetworkManager(PerformanceCounterManager perfManager = null)
         {
-            // 允许为空 (为了兼容性)，如果为空则内部功能自动禁用
+            // May be null: SMB filtering is then off
             _perfManager = perfManager ?? new PerformanceCounterManager(); 
             
-            // [Fix #287] 监听网络地址变更事件，强制刷新 IP 和 网卡缓存
-            // 当用户切换 WIFI 或插拔网线时，IP地址和网卡实例都会失效，必须重置
+            // Network address changes reset the IP and adapter caches
+            // (switching Wi-Fi or plugging a cable invalidates both)
             NetworkChange.NetworkAddressChanged += (s, e) => {
                 _staticIPCache = null; 
                 _shouldResetAdapters = true;
@@ -57,7 +57,7 @@ namespace WinMonitor.Services
         }
 
         // ===========================================================
-        // 更新逻辑 (原 UpdateAll 中的部分)
+        // Update
         // ===========================================================
         public void ProcessUpdate(IHardware hw, Settings cfg, double timeDelta, bool isSlowScanTick)
         {
@@ -82,11 +82,11 @@ namespace WinMonitor.Services
             }
         }
 
-        // [新增] 获取当前 IP (带 10秒 缓存)
+        // Current IP (cached)
         public string GetCurrentIP()
         {
-            // [Fix #287] 如果网络发生了变更，强制重置所有网卡状态
-            // 这会迫使 MatchNativeNetworkAdapter 重新寻找最新的 NetworkInterface 实例 (获取正确的新IP)
+            // After a network change, reset every adapter
+            // so MatchNativeNetworkAdapter finds the current NetworkInterface (and the new IP)
             if (_shouldResetAdapters)
             {
                 try
@@ -94,18 +94,18 @@ namespace WinMonitor.Services
                     foreach (var state in _netStates.Values)
                     {
                         state.NativeAdapter = null;
-                        state.LastMatchAttempt = DateTime.MinValue; // 允许立即重新匹配
+                        state.LastMatchAttempt = DateTime.MinValue; // allow re-matching now
                     }
                     _shouldResetAdapters = false;
                 }
                 catch 
                 { 
-                    // 忽略并发修改异常，保留标志位下次重试
+                    // concurrent change: keep the flag and retry next time
                 }
             }
 
-            // 1. 缓存保护：只有当缓存了【有效IP】且距离上次检查不到 30 秒时，才直接返回
-            // 关键修改：如果 _staticIPCache 是空的，忽略时间限制，强制重试
+            // 1. Use the cache only when it holds a valid IP checked less than 30 s ago;
+            // an empty cache is always retried
             if (!string.IsNullOrEmpty(_staticIPCache) && (DateTime.Now - _lastIPCheckTime).TotalSeconds < 30)
             {
                 return _staticIPCache;
@@ -113,20 +113,20 @@ namespace WinMonitor.Services
 
             string foundIP = null;
 
-            // 2. 策略A：直接从当前锁定的硬件中获取 (这是最直接的方式)
+            // 2. From the matched adapters (the most direct way)
             try 
             {
-                // ★★★ 核心修复：即使 _cachedNetHw 为空（还没锁定网卡），也要尝试从 _netStates 中寻找已匹配 NativeAdapter 的网卡 ★★★
-                // 之前的 bug 是：网速跳动说明 MatchNativeNetworkAdapter 成功了，_netStates 里有 NativeAdapter，
-                // 但 _cachedNetHw 还没来得及更新，导致这里直接跳过。
+                // Also look in _netStates when no adapter is locked yet:
+                // matching can succeed before _cachedNetHw is set,
+                // and this used to skip it.
                 
-                // 如果已锁定，优先用锁定的
+                // Locked adapter first
                 if (_cachedNetHw != null && _netStates.TryGetValue(_cachedNetHw, out var state) && state.NativeAdapter != null)
                 {
                      foundIP = GetIPv4FromAdapter(state.NativeAdapter);
                 }
                 
-                // 如果没锁定（或锁定的没取到），遍历所有已知状态的网卡 (这些网卡都是有流量活动的)
+                // Otherwise any adapter that has traffic
                 if (string.IsNullOrEmpty(foundIP))
                 {
                     foreach (var kv in _netStates)
@@ -145,7 +145,7 @@ namespace WinMonitor.Services
             }
             catch { }
 
-            // 3. 策略B (兜底)：如果上面没拿到，才主动遍历系统网卡 (只跑一次)
+            // 3. Fallback: enumerate the system's adapters (once)
             if (string.IsNullOrEmpty(foundIP))
             {
                 try
@@ -155,7 +155,7 @@ namespace WinMonitor.Services
                     {
                         if (nic.OperationalStatus != OperationalStatus.Up) continue;
                         if (nic.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
-                        if (IsVirtualNetwork(nic.Description) || IsVirtualNetwork(nic.Name)) continue; // 仅兜底物理网卡
+                        if (IsVirtualNetwork(nic.Description) || IsVirtualNetwork(nic.Name)) continue; // physical adapters only
 
                         foundIP = GetIPv4FromAdapter(nic);
                         if (!string.IsNullOrEmpty(foundIP)) break;
@@ -187,17 +187,16 @@ namespace WinMonitor.Services
                     {
                         string ipStr = ip.Address.ToString();
                         
-                        // [Fix #287] 忽略 APIPA (169.254.x.x) 地址
-                        // 这些地址通常是 DHCP 失败时的临时地址，会导致网页版服务绑定错误
+                        // Skip APIPA (169.254.x.x): a temporary address after DHCP fails
                         if (ipStr.StartsWith("169.254.")) continue;
 
-                        // [Fix #206] 优先返回 192.168.x.x 类型的内网 IP
+                        // Prefer 192.168.x.x local addresses
                         if (ipStr.StartsWith("192.168."))
                         {
                             return ipStr;
                         }
 
-                        // 如果还没找到最佳 IP，暂时存第一个找到的 IPv4 作为兜底
+                        // Keep the first IPv4 as a fallback
                         if (bestIP == null)
                         {
                             bestIP = ipStr;
@@ -211,15 +210,15 @@ namespace WinMonitor.Services
         }
 
         // ===========================================================
-        // 获取最佳网络数值 (已简化：Preferred 逻辑已移至 ValueProvider 静态缓存)
+        // Best network value (a preferred adapter is handled by HardwareValueProvider)
         // ===========================================================
         public float? GetBestValue(string key, Computer computer, Settings cfg, Dictionary<string, float> lastValidMap, object syncLock)
         {
-            // 2. 自动选优 (带缓存) - 原 GetBestNetworkValue
-            // A. 尝试运行时缓存
+            // 2. Automatic choice (cached)
+            // A. Runtime cache
             if (_cachedNetHw != null)
             {
-                // ★★★ 【修复 1】存活检查：如果缓存的硬件对象已经不在当前的硬件列表中（已失效），强制丢弃 ★★★
+                // Drop the cached adapter if it no longer exists
                 if (!computer.Hardware.Contains(_cachedNetHw))
                 {
                     _cachedNetHw = null;
@@ -227,7 +226,7 @@ namespace WinMonitor.Services
                 else
                 {
                     float? cachedVal = ReadNetworkSensor(_cachedNetHw, key, lastValidMap, syncLock);
-                    // 逻辑优化：如果有流量，直接用；如果没流量但距离上次全盘扫描 < 3秒，也直接用。
+                    // Traffic, or less than 3 s since the last full scan: use it
                     if ((cachedVal.HasValue && cachedVal.Value > 0.1f) ||
                         (DateTime.Now - _lastNetScan).TotalSeconds < 3)
                     {
@@ -236,21 +235,21 @@ namespace WinMonitor.Services
                 }
             }
 
-            // ★★★ [漏掉的部分] B. 尝试启动时缓存 (Settings 中的记录) ★★★
+            // B. Adapter remembered in the settings
             if (_cachedNetHw == null && !string.IsNullOrEmpty(cfg.LastAutoNetwork))
             {
-                // 尝试直接找上次记住的网卡
+                // Try the remembered adapter
                 var savedHw = computer.Hardware.FirstOrDefault(h => h.Name == cfg.LastAutoNetwork);
                 if (savedHw != null)
                 {
-                    // 找到了！直接设为缓存，跳过全盘扫描
+                    // Found: cache it and skip the full scan
                     _cachedNetHw = savedHw;
                     _lastNetScan = DateTime.Now;
                     return ReadNetworkSensor(savedHw, key, lastValidMap, syncLock);
                 }
             }
 
-            // C. 全盘扫描
+            // C. Scan all adapters
             IHardware? bestHw = null;
             double bestScore = double.MinValue;
             ISensor? bestTarget = null;
@@ -275,20 +274,20 @@ namespace WinMonitor.Services
                 }
             }
 
-            // D. 更新缓存
+            // D. Update the cache
             if (bestHw != null)
             {
                 _cachedNetHw = bestHw;
                 _lastNetScan = DateTime.Now;
                 
-                // ★★★ [漏掉的部分] 记住这次的选择 ★★★
+                // Remember the choice
                 if (cfg.LastAutoNetwork != bestHw.Name)
                 {
                     cfg.LastAutoNetwork = bestHw.Name;
                 }
             }
 
-            // E. 返回
+            // E. Return
             if (bestTarget?.Value is float v && !float.IsNaN(v))
             {
                 lock (syncLock) lastValidMap[key] = v;
@@ -318,11 +317,11 @@ namespace WinMonitor.Services
         }
 
         // ===========================================================
-        // 流量累积与匹配 (原 HardwareMonitor.cs 核心逻辑)
+        // Traffic: estimate vs native counters
         // ===========================================================
         private void AccumulateTraffic(IHardware hw, Settings cfg, double seconds)
         {
-            // 1. 获取或创建当前硬件的独立状态
+            // 1. This adapter's state
             if (!_netStates.TryGetValue(hw, out var state))
             {
                 state = new NetworkState();
@@ -332,7 +331,7 @@ namespace WinMonitor.Services
             long finalUp = 0;
             long finalDown = 0;
 
-            // A. LHM 估算值
+            // A. LibreHardwareMonitor estimate
             if (state.CachedUpSensor == null || state.CachedDownSensor == null)
             {
                 foreach (var s in hw.Sensors)
@@ -345,7 +344,7 @@ namespace WinMonitor.Services
             long lhmUpDelta = (long)((state.CachedUpSensor?.Value ?? 0) * seconds);
             long lhmDownDelta = (long)((state.CachedDownSensor?.Value ?? 0) * seconds);
 
-            // B. 原生精准值
+            // B. Native (exact) value
             MatchNativeNetworkAdapter(hw.Name, state);
             
             bool nativeValid = false;
@@ -370,12 +369,12 @@ namespace WinMonitor.Services
                 catch { state.NativeAdapter = null; }
             }
 
-            // C. 决策时刻
+            // C. Decide
             if (nativeValid)
             {
                 if ((nativeUpDelta + nativeDownDelta == 0) && (lhmUpDelta + lhmDownDelta > 51200))
                 {
-                    // 匹配错误
+                    // wrong match
                     finalUp = lhmUpDelta;
                     finalDown = lhmDownDelta;
                     state.NativeAdapter = null; 
@@ -392,18 +391,18 @@ namespace WinMonitor.Services
                 finalDown = lhmDownDelta;
             }
 
-            // ★★★ [新增] 忽略内网流量 (SMB) ★★★
-            // 如果用户开启了此选项，且计数器已就绪，则从总流量中扣除 SMB 流量
+            // Leave out local network (SMB) traffic
+            // when switched on and the counters are ready
             if (cfg.IgnoreSmbTraffic)
             {
                 if (_perfManager.IsInitialized)
                 {
-                    // 获取估算的 SMB 流量 (内部已包含 1.1 倍的协议开销补偿)
+                    // Estimated SMB traffic (includes a protocol overhead factor)
                     var smb = _perfManager.GetEstimatedSmbBytes(seconds);
                     
                     if (smb.UpBytes > 0 || smb.DownBytes > 0)
                     {
-                        // 扣除 (由于采样时间误差，防止扣成负数)
+                        // Subtract (never below zero: sampling times differ)
                         if (smb.UpBytes > 0) finalUp = Math.Max(0, finalUp - smb.UpBytes);
                         if (smb.DownBytes > 0) finalDown = Math.Max(0, finalDown - smb.DownBytes);
                     }
@@ -414,8 +413,8 @@ namespace WinMonitor.Services
                 }
             }
 
-            // D. 存入数据
-            // ★★★ [新增] 安全阀：单次增量超过 10GB 视为异常丢弃 ★★★
+            // D. Store
+            // Safety: a single step above 10 GB is discarded
             if (finalUp > 10737418240L || finalDown > 10737418240L) return;
 
             if (finalUp > 0 || finalDown > 0)
@@ -436,30 +435,30 @@ namespace WinMonitor.Services
             {
                 var nics = NetworkInterface.GetAllNetworkInterfaces();
                 
-                // 预先分配令牌列表容量
+                // Pre-size the token list
                 var lhmTokens = new List<string>(capacity: 10);
                 SplitTokens(lhmName, lhmTokens);
 
                 foreach (var nic in nics)
                 {
-                    // 1. 匹配连接名称
+                    // 1. Connection name
                     if (nic.Name.Equals(lhmName, StringComparison.OrdinalIgnoreCase)) { SetNativeAdapter(nic, state); return; }
-                    // 2. 匹配硬件描述
+                    // 2. Hardware description
                     if (nic.Description.Equals(lhmName, StringComparison.OrdinalIgnoreCase)) { SetNativeAdapter(nic, state); return; }
-                    // 3. 模糊匹配
+                    // 3. Fuzzy match
                     if (lhmTokens.Count > 0 && lhmName.Length > 5) 
                     {
                         var nicTokens = new List<string>(capacity: 10);
                         SplitTokens(nic.Description, nicTokens);
                         
-                        // 优化匹配算法，减少内存分配
+                        // Low-allocation matching
                         int matchCount = 0;
                         foreach (var token in lhmTokens)
                         {
                             if (nicTokens.Contains(token, StringComparer.OrdinalIgnoreCase))
                             {
                                 matchCount++;
-                                if (matchCount > 2) break; // 提前退出，满足条件即可
+                                if (matchCount > 2) break; // enough matches
                             }
                         }
                         
@@ -474,7 +473,7 @@ namespace WinMonitor.Services
             catch { state.NativeAdapter = null; }
         }
         private static readonly char[] _tokenSeparators = { ' ', '(', ')', '[', ']', '-', '_', '#' };
-        // 优化的SplitTokens方法，使用预分配的列表减少内存分配
+        // Token splitting into a pre-sized list (fewer allocations)
         private void SplitTokens(string input, List<string> result)
         {
             result.Clear();
@@ -500,7 +499,7 @@ namespace WinMonitor.Services
             }
         }
         
-        // 保持向后兼容性
+        // Kept for compatibility
         private List<string> SplitTokens(string input)
         {
             var result = new List<string>(capacity: 10);

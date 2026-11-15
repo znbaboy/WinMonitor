@@ -9,38 +9,38 @@ namespace WinMonitor.Services
 {
     public class DiskManager
     {
-        // ★★★ [新增] 2. 记录每个硬盘最后一次活跃的时间 (用于判断是否深睡)
+        // Last activity per disk (to let idle disks sleep)
         private Dictionary<IHardware, DateTime> _diskLastActiveTime = new Dictionary<IHardware, DateTime>();
-        // 磁盘智能缓存
+        // Selected disk cache
         private IHardware? _cachedDiskHw;
         private DateTime _lastDiskScan = DateTime.MinValue;
-        // ★★★ [新增] 静态缓存：避免 DriveInfo 重复创建 ★★★
+        // DriveInfo cache (avoids re-creating them)
         private static readonly Dictionary<string, DriveInfo> _driveInfoCache = new();
 
         public void ClearCache()
         {
             _diskLastActiveTime.Clear();
             _cachedDiskHw = null;
-            // 可以选择清理 DriveInfo 缓存，也可以保留（因为它通常不变）
+            // The DriveInfo cache can stay (drives rarely change)
             _driveInfoCache.Clear();
         }
 
         // ===========================================================
-        // 更新逻辑 (原 UpdateAll 中的部分)
+        // Update
         // ===========================================================
         public void ProcessUpdate(IHardware hw, Settings cfg, bool isSlowScanTick, bool needDiskBgScan)
         {
-            // 1. 严格遵守首选磁盘锁定
+            // 1. A preferred disk always wins
             if (!string.IsNullOrEmpty(cfg.PreferredDisk) && 
                 !hw.Name.Equals(cfg.PreferredDisk, StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }
 
-            // 初始化活跃时间记录
+            // Start the activity record
             if (!_diskLastActiveTime.ContainsKey(hw)) _diskLastActiveTime[hw] = DateTime.Now;
 
-            // 判断是否是当前 UI 上显示的那个盘
+            // Is it the disk shown on the panel?
             bool isTarget = (_cachedDiskHw != null && hw == _cachedDiskHw) ||
                             (hw.Name == cfg.LastAutoDisk) ||
                             (hw.Name == cfg.PreferredDisk);
@@ -48,24 +48,24 @@ namespace WinMonitor.Services
             bool shouldUpdate = false;
             double idleMinutes = (DateTime.Now - _diskLastActiveTime[hw]).TotalMinutes;
 
-            // === 🧠 智能退避核心逻辑 ===
+            // === Back off on idle disks ===
             if (isTarget)
             {
                 shouldUpdate = true;
             }
             else
             {
-                // B. 如果是后台盘（比如你的 E 盘）：
-                if (idleMinutes > 5) shouldUpdate = false; // [💤 深睡模式]
-                else if (idleMinutes > 1) { if (needDiskBgScan) shouldUpdate = true; } // [❄️ 冷却模式]
-                else { if (isSlowScanTick) shouldUpdate = true; } // [🔥 活跃模式]
+                // B. Other disks:
+                if (idleMinutes > 5) shouldUpdate = false; // [sleep: idle > 5 min]
+                else if (idleMinutes > 1) { if (needDiskBgScan) shouldUpdate = true; } // [cooling: idle > 1 min]
+                else { if (isSlowScanTick) shouldUpdate = true; } // 
             }
 
-            // 执行更新
+            // Update
             if (shouldUpdate)
             {
                 hw.Update();
-                // ★★★ 检查是否有流量，如果有，重置活跃计时器 ★★★
+                // Traffic resets the idle timer
                 bool hasTraffic = false;
                 foreach (var s in hw.Sensors)
                 {
@@ -80,14 +80,14 @@ namespace WinMonitor.Services
         }
 
         // ===========================================================
-        // 获取最佳磁盘数值 (已简化：Preferred 逻辑已移至 ValueProvider 静态缓存)
+        // Best disk value (a preferred disk is handled by HardwareValueProvider)
         // ===========================================================
         public float? GetBestValue(string key, Computer computer, Settings cfg, Dictionary<string, float> lastValidMap, object syncLock)
         {
-            // 1. 运行时缓存 (针对自动选择模式)
+            // 1. Runtime cache (automatic mode)
             if (_cachedDiskHw != null)
             {
-                // ★★★ 【修复 2】存活检查：防止持有僵尸对象的引用 ★★★
+                // Drop the cached disk if it no longer exists
                 if (!computer.Hardware.Contains(_cachedDiskHw))
                 {
                     _cachedDiskHw = null;
@@ -95,14 +95,14 @@ namespace WinMonitor.Services
                 else
                 {
                     float? cachedVal = ReadDiskSensor(_cachedDiskHw, key, lastValidMap, syncLock);
-                    // 有读写活动或冷却期内，直接返回
-                    // ★★★ [新增] 温度支持 ★★★
+                    // Active, or still in the cool-down: use it
+                    // temperature too
                     if ((cachedVal.HasValue && cachedVal.Value > 0.1f) || key.Contains("Temp") || (DateTime.Now - _lastDiskScan).TotalSeconds < 10)
                         return cachedVal;
                 }
             }
-            // === [核心修复] 逻辑分区处理：使用缓存的 DriveInfo ===
-            // key 格式如: DISK.C.Used
+            // === Partitions, via the DriveInfo cache ===
+            // key format: DISK.C.Used
             var parts = key.Split('.');
             if (parts.Length >= 3 && parts[1].Length == 1 && char.IsLetter(parts[1][0]))
             {
@@ -111,13 +111,13 @@ namespace WinMonitor.Services
                 string root = driveLetter + ":\\";
 
                 DriveInfo di;
-                // ★★★ 优先查缓存 ★★★
+                // Cache first
                 if (!_driveInfoCache.TryGetValue(root, out di))
                 {
                     try 
                     { 
                         di = new DriveInfo(root); 
-                        _driveInfoCache[root] = di; // 存入缓存
+                        _driveInfoCache[root] = di; // cache it
                     } 
                     catch { return null; }
                 }
@@ -126,13 +126,13 @@ namespace WinMonitor.Services
                 {
                     try 
                     { 
-                        // IsReady 不会产生 Volume 字符串垃圾
+                        // IsReady does not allocate the volume string
                         if (di.IsReady) return (100f - (float)((double)di.TotalFreeSpace / di.TotalSize * 100.0));
                     } 
                     catch { return 0f; }
                 }
             }
-            // ★★★ [新增] B. 尝试启动时缓存 (Settings 记忆) ★★★
+            // B. Disk remembered in the settings
             if (_cachedDiskHw == null && !string.IsNullOrEmpty(cfg.LastAutoDisk))
             {
                 var savedHw = computer.Hardware.FirstOrDefault(h => h.Name == cfg.LastAutoDisk);
@@ -144,7 +144,7 @@ namespace WinMonitor.Services
                 }
             }
 
-            // C. 全盘扫描
+            // C. Scan all disks
             string sysPrefix = "";
             try { sysPrefix = Path.GetPathRoot(Environment.SystemDirectory)?.Substring(0, 2) ?? ""; } catch { }
 
@@ -165,7 +165,7 @@ namespace WinMonitor.Services
                 if (read == null && write == null) continue;
 
                 double score = (read?.Value ?? 0) + (write?.Value ?? 0);
-                if (isSystem) score += 1e9; // 系统盘优先
+                if (isSystem) score += 1e9; // system disk first
 
                 if (score > bestScore)
                 {
@@ -175,13 +175,13 @@ namespace WinMonitor.Services
                 }
             }
 
-            // D. 更新缓存
+            // D. Update the cache
             if (bestHw != null)
             {
                 _cachedDiskHw = bestHw;
                 _lastDiskScan = DateTime.Now;
                 
-                // ★★★ [新增] 记住这次的选择 ★★★
+                // Remember the choice
                 if (cfg.LastAutoDisk != bestHw.Name)
                 {
                     cfg.LastAutoDisk = bestHw.Name;
@@ -194,7 +194,7 @@ namespace WinMonitor.Services
                 return v;
             }
             
-            // ★★★ [新增] 温度支持补漏 ★★★
+            // Temperature fallback
             if (key == "DISK.Temp" && bestHw != null) return ReadDiskSensor(bestHw, key, lastValidMap, syncLock);
 
             lock (syncLock) { if (lastValidMap.TryGetValue(key, out var last)) return last; }
@@ -208,7 +208,7 @@ namespace WinMonitor.Services
             {
                 if (s.SensorType == SensorType.Temperature)
                 {
-                    // 排除干扰项
+                    // Skip unrelated sensors
                     if (s.Name.IndexOf("warning", StringComparison.OrdinalIgnoreCase) >= 0 ||
                         s.Name.IndexOf("critical", StringComparison.OrdinalIgnoreCase) >= 0)
                         continue;
@@ -222,7 +222,7 @@ namespace WinMonitor.Services
 
         private float? ReadDiskSensor(IHardware hw, string key, Dictionary<string, float> lastValidMap, object syncLock)
         {
-            // ★★★ [新增] 温度支持 ★★★
+            // Temperature
             if (key == "DISK.Temp")
             {
                 var best = FindBestTempSensor(hw);

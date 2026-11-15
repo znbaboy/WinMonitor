@@ -39,6 +39,13 @@ public static class W {
   }
 }
 "@
+Add-Type @"
+using System; using System.Runtime.InteropServices;
+public static class M {
+  [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, UIntPtr e);
+}
+"@
 
 $script:failed = @()
 function Fail([string]$m) { Write-Host "FAIL: $m" -ForegroundColor Red; $script:failed += $m }
@@ -148,6 +155,35 @@ if ($p) { Window $p 'Settings - WinMonitor' 'settings-items' }
 $env:WINMONITOR_EXPAND_ALL = '1'
 $p = Start-App '{ "DisabledGroups": ["GPU"] }' @('--open', 'settings:Items')
 if ($p) { Window $p 'Settings - WinMonitor' 'settings-items-expanded' 900 1000 }
+if ($p) {
+  # drag the DASH.HOST row below DASH.Time with the real mouse, then check the saved order
+  try {
+    Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+    $win = [W]::Find([uint32]$p.Id, 'Settings - WinMonitor', $false) | Select-Object -First 1
+    $root = [System.Windows.Automation.AutomationElement]::FromHandle($win)
+    function Find-Handle($n) {
+      $c = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, "Move $n")
+      $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $c)
+    }
+    $a = Find-Handle 'DASH.HOST'; $b = Find-Handle 'DASH.Time'
+    if (-not $a -or -not $b) { Fail 'drag test: handles not found' }
+    else {
+      $ra = $a.Current.BoundingRectangle; $rb = $b.Current.BoundingRectangle
+      $x = [int]($ra.X + $ra.Width / 2); $y1 = [int]($ra.Y + $ra.Height / 2); $y2 = [int]($rb.Y + $rb.Height)
+      [M]::SetCursorPos($x, $y1); Start-Sleep -Milliseconds 300
+      [M]::mouse_event(0x2, 0, 0, 0, [UIntPtr]::Zero); Start-Sleep -Milliseconds 200
+      for ($yy = $y1; $yy -le $y2 + 6; $yy += 4) { [M]::SetCursorPos($x, $yy); Start-Sleep -Milliseconds 15 }
+      Start-Sleep -Milliseconds 200
+      [M]::mouse_event(0x4, 0, 0, 0, [UIntPtr]::Zero); Start-Sleep 2
+      $json = Get-Content "$Dir\settings.json" -Raw | ConvertFrom-Json
+      $host1 = ($json.MonitorItems | Where-Object Key -eq 'DASH.HOST').SortIndex
+      $time1 = ($json.MonitorItems | Where-Object Key -eq 'DASH.Time').SortIndex
+      Write-Host "DRAG: DASH.HOST=$host1 DASH.Time=$time1"
+      if ($host1 -gt $time1) { Ok 'drag to reorder rows' } else { Fail 'drag to reorder rows did not change the order' }
+      Shot $win 'settings-items-dragged' 0 $true
+    }
+  } catch { Fail "drag test: $_" }
+}
 $env:WINMONITOR_EXPAND_ALL = $null
 $p = Start-App $null @('--open', 'settings:Hardware')
 if ($p) { Start-Sleep 5; Window $p 'Settings - WinMonitor' 'settings-hardware' }

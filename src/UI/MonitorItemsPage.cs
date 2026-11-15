@@ -54,7 +54,7 @@ namespace WinMonitor.UI
             rows.Reordered += SaveOrder;
 
             // header: handle, name, "2 of 5 shown", switch
-            var handle = Handle();
+            var handle = Handle(group);
             var name = new TextBlock { Text = _app.GroupName(group), FontWeight = Ui.Bold, VerticalAlignment = VerticalAlignment.Center };
             var count = new TextBlock { Foreground = Ui.Res("TextFillColorSecondaryBrush"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) };
             var toggle = new ToggleSwitch { IsOn = _cfg.IsGroupEnabled(group), OnContent = "", OffContent = "", MinWidth = 0, VerticalAlignment = VerticalAlignment.Center };
@@ -107,7 +107,7 @@ namespace WinMonitor.UI
                 count.Text = on ? $"{items.Count(i => i.VisibleInPanel)} of {items.Count} shown" : "Hidden from the panel";
             }
 
-            foreach (var it in items) rows.Add(ItemRow(it, Refresh));
+            foreach (var it in items) rows.Add(ItemRow(it, rows, Refresh));
 
             var card = new Expander
             {
@@ -130,10 +130,12 @@ namespace WinMonitor.UI
         }
 
         // ------------------------------------------------------------------ row
-        private FrameworkElement ItemRow(MonitorItemConfig item, Action refreshCount)
+        /// <summary>One line per row: handle, show tick, name, unit, bar. Names and units apply on Enter or when leaving the box.</summary>
+        private FrameworkElement ItemRow(MonitorItemConfig item, ReorderPanel rows, Action refreshCount)
         {
-            var handle = Handle();
-            var show = new CheckBox { Content = AppHost.ItemName(item), IsChecked = item.VisibleInPanel, MinWidth = 0, VerticalAlignment = VerticalAlignment.Center };
+            var handle = Handle(item.Key);
+            var show = new CheckBox { IsChecked = item.VisibleInPanel, MinWidth = 0, Padding = new Thickness(0), VerticalAlignment = VerticalAlignment.Center };
+            ToolTipService.SetToolTip(show, "Show on the panel");
             show.Click += (_, _) =>
             {
                 item.VisibleInPanel = show.IsChecked == true;
@@ -141,13 +143,33 @@ namespace WinMonitor.UI
                 refreshCount();
             };
 
-            var key = new TextBlock
+            // name: empty = automatic (shown greyed), a single space hides it
+            string defName = AutomaticName(item);
+            var name = new TextBox { Text = item.UserLabel ?? "", PlaceholderText = defName, VerticalAlignment = VerticalAlignment.Center };
+            ToolTipService.SetToolTip(name, $"{item.Key}: leave empty for the automatic name, a space hides it");
+            OnCommit(name, () =>
             {
-                Text = item.Key,
-                Foreground = Ui.Res("TextFillColorTertiaryBrush"),
-                FontSize = 12,
+                string n = name.Text;
+                item.UserLabel = n.Length > 0 && string.IsNullOrWhiteSpace(n) ? " " : (n.Trim() == defName ? "" : n.Trim());
+                if (item.UserLabel == "") name.Text = "";
+                Apply();
+            });
+
+            // unit: empty = automatic, spaces = none, anything else = custom ({u} = the automatic unit)
+            string defUnit = MetricUtils.GetUnitStr(item.Key, 0, MetricUtils.UnitContext.SettingsPanel);
+            var unit = new TextBox
+            {
+                Text = item.UnitPanel == null ? "" : (item.UnitPanel == "" ? " " : item.UnitPanel),
+                PlaceholderText = string.IsNullOrEmpty(defUnit) ? "unit" : defUnit,
                 VerticalAlignment = VerticalAlignment.Center,
             };
+            ToolTipService.SetToolTip(unit, "Unit: leave empty for automatic, a space for none, {u} stands for the automatic unit (e.g. {u}/s)");
+            OnCommit(unit, () =>
+            {
+                string u = unit.Text;
+                item.UnitPanel = u.Length == 0 ? null : string.IsNullOrWhiteSpace(u) ? "" : (u == defUnit ? null : u);
+                Apply();
+            });
 
             CheckBox? bar = null;
             if (item.HasBar)
@@ -156,92 +178,45 @@ namespace WinMonitor.UI
                 bar.Click += (_, _) => { item.ShowBar = bar.IsChecked == true; Apply(); };
             }
 
-            var edit = new Button
-            {
-                Content = new FontIcon { Glyph = "", FontSize = 14 },
-                Padding = new Thickness(8, 6, 8, 6),
-                Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
-                BorderThickness = new Thickness(0),
-                VerticalAlignment = VerticalAlignment.Center,
-                Flyout = EditFlyout(item, show),
-            };
-            ToolTipService.SetToolTip(edit, "Rename or change the unit");
-
-            var row = new Grid { ColumnSpacing = 8, MinHeight = 40, Padding = new Thickness(0, 0, 4, 0), Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(90) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            AddAt(row, handle, 0); AddAt(row, show, 1); AddAt(row, key, 2);
-            if (bar != null) AddAt(row, bar, 3);
-            AddAt(row, edit, 4);
+            var row = new Grid { ColumnSpacing = 8, MinHeight = 44, Padding = new Thickness(0, 2, 4, 2), Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                       // handle
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(32) });                    // show
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });  // name
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });                   // unit
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });                    // bar
+            AddAt(row, handle, 0); AddAt(row, show, 1); AddAt(row, name, 2); AddAt(row, unit, 3);
+            if (bar != null) AddAt(row, bar, 4);
             row.Tag = item;
+            rows.AttachHandle(handle, row);
             return row;
         }
 
-        /// <summary>Name and unit for one row. Empty = automatic; a single space hides it.</summary>
-        private Flyout EditFlyout(MonitorItemConfig item, CheckBox show)
+        /// <summary>The name a row has without a custom one (live name, else the built-in text).</summary>
+        private static string AutomaticName(MonitorItemConfig item)
         {
-            string defName = LanguageManager.GetOriginal(UIUtils.Intern("Items." + item.Key));
-            string defUnit = MetricUtils.GetUnitStr(item.Key, 0, MetricUtils.UnitContext.SettingsPanel);
-
-            var name = new TextBox { Header = "Name", PlaceholderText = defName, Width = 260 };
-            var unit = new TextBox { Header = "Unit", PlaceholderText = string.IsNullOrEmpty(defUnit) ? "(none)" : defUnit, Width = 260 };
-            void Load()
-            {
-                name.Text = item.UserLabel ?? "";
-                unit.Text = item.UnitPanel == null ? "" : (item.UnitPanel == "" ? " " : item.UnitPanel);
-            }
-
-            var flyout = new Flyout();
-            void Save()
-            {
-                // name: empty = automatic, a single space hides it
-                string n = name.Text;
-                item.UserLabel = n.Length > 0 && string.IsNullOrWhiteSpace(n) ? " " : (n.Trim() == defName ? "" : n.Trim());
-                // unit: empty = automatic, spaces = none, anything else = custom ({u} = the automatic unit)
-                string u = unit.Text;
-                item.UnitPanel = u.Length == 0 ? null : string.IsNullOrWhiteSpace(u) ? "" : (u == defUnit ? null : u);
-                show.Content = AppHost.ItemName(item);
-                Apply();
-                flyout.Hide();
-            }
-            void Reset()
-            {
-                item.UserLabel = "";
-                item.UnitPanel = null;
-                show.Content = AppHost.ItemName(item);
-                Apply();
-                flyout.Hide();
-            }
-
-            var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-            buttons.Children.Add(Ui.Button("Save", Save, accent: true));
-            buttons.Children.Add(Ui.Button("Reset", Reset));
-            var panel = new StackPanel { Spacing = 10 };
-            panel.Children.Add(name);
-            panel.Children.Add(unit);
-            panel.Children.Add(Ui.Hint("Empty = automatic. A single space hides it. In units, {u} stands for the automatic unit (e.g. {u}/s)."));
-            panel.Children.Add(buttons);
-            flyout.Content = panel;
-            flyout.Opening += (_, _) => Load();
-            name.KeyDown += (_, e) => { if (e.Key == Windows.System.VirtualKey.Enter) Save(); };
-            unit.KeyDown += (_, e) => { if (e.Key == Windows.System.VirtualKey.Enter) Save(); };
-            return flyout;
+            string saved = item.UserLabel;
+            item.UserLabel = "";
+            string n = AppHost.ItemName(item);
+            item.UserLabel = saved;
+            return n;
         }
 
         // ------------------------------------------------------------------ helpers
-        private static FrameworkElement Handle()
+        /// <summary>The ≡ drag handle (a Control, so screen readers and UI tests can find it by name).</summary>
+        private static FrameworkElement Handle(string name)
         {
-            var h = new Border
+            var h = new ContentControl
             {
                 Width = 28,
                 Height = 32,
+                IsTabStop = false,
                 Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),   // whole area grabs
-                Child = new FontIcon { Glyph = "", FontSize = 14, Foreground = Ui.Res("TextFillColorSecondaryBrush") },
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                VerticalContentAlignment = VerticalAlignment.Center,
+                Content = new FontIcon { Glyph = "\uE700", FontSize = 14, Foreground = Ui.Res("TextFillColorSecondaryBrush") },
                 VerticalAlignment = VerticalAlignment.Center,
             };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(h, "Move " + name);
             ToolTipService.SetToolTip(h, "Drag to move");
             return h;
         }

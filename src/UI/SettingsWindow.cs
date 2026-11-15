@@ -374,7 +374,7 @@ namespace WinMonitor.UI
             string Max(string key) => T(key) + " (" + T("Menu.MaxLimits") + ")";
 
             return Ui.Page(
-                Ui.PageTitle(T("Menu.HardwareSettings")),
+                Ui.PageTitle(T("Menu.SystemHardwar") is var sh && sh != "SystemHardwar" ? sh : "System"),
                 Ui.Section(T("Menu.HardwareSettings")),
                 Ui.Row(T("Menu.UseWinPerCounters"), Ui.Toggle(c.UseWinPerCounters, v => { c.UseWinPerCounters = v; Save(); _app.ApplyMonitorLayout(); })),
                 Ui.Row(T("Menu.IgnoreSMBTraffic"), Ui.Toggle(c.IgnoreSmbTraffic, v => { c.IgnoreSmbTraffic = v; Save(); _app.ApplyMonitorLayout(); })),

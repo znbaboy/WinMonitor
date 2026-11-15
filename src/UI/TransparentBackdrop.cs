@@ -13,6 +13,7 @@ namespace WinMonitor.UI
         private static Windows.UI.Composition.Compositor? _compositor;
         private static IntPtr _dqController;
         private IntPtr _blackBrush;
+        private WndProcHook? _hook;   // must stay referenced: Windows calls into it for the window's lifetime
 
         protected override void OnTargetConnected(ICompositionSupportsSystemBackdrop target, XamlRoot xamlRoot)
         {
@@ -21,8 +22,8 @@ namespace WinMonitor.UI
 
             var hwnd = (IntPtr)(long)xamlRoot.ContentIslandEnvironment.AppWindowId.Value;
             ConfigureDwm(hwnd);
-            var hook = new WndProcHook(hwnd);
-            hook.Add((msg, w, l) =>
+            _hook = new WndProcHook(hwnd);
+            _hook.Add((msg, w, l) =>
             {
                 if (msg == Native.WM_ERASEBKGND && ClearBackground(hwnd, w)) return (IntPtr)1;
                 if (msg == Native.WM_DWMCOMPOSITIONCHANGED) { ConfigureDwm(hwnd); return IntPtr.Zero; }

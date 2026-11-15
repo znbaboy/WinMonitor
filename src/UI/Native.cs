@@ -157,8 +157,12 @@ namespace WinMonitor.UI
         private readonly IntPtr _old;
         private readonly List<Func<uint, IntPtr, IntPtr, IntPtr?>> _handlers = new();
 
+        // Windows keeps calling the procedure until the window is gone; never let a hook be collected.
+        private static readonly List<WndProcHook> Alive = new();
+
         public WndProcHook(IntPtr hwnd)
         {
+            lock (Alive) Alive.Add(this);
             _proc = Proc;
             _old = Native.SetWindowLongPtr(hwnd, Native.GWLP_WNDPROC, Marshal.GetFunctionPointerForDelegate(_proc));
         }

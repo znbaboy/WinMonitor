@@ -74,7 +74,7 @@ function Shot([IntPtr]$h, [string]$name, [int]$margin = 0, [bool]$dwm = $false) 
   Write-Host "screenshot $name ($($r.R - $r.L)x$($r.B - $r.T))"
 }
 
-function Window($p, [string]$title, [string]$name, [int]$w = 1000, [int]$h = 760) {
+function Window($p, [string]$title, [string]$name, [int]$w = 900, [int]$h = 700) {
   $win = [W]::Find([uint32]$p.Id, $title, $false) | Select-Object -First 1
   if (-not $win) { Fail "window '$title' not found"; return }
   [W]::SetWindowPos($win, [IntPtr]::Zero, 60, 30, $w, $h, 0x40) | Out-Null
@@ -88,7 +88,7 @@ function Window($p, [string]$title, [string]$name, [int]$w = 1000, [int]$h = 760
 reg add HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize /v AppsUseLightTheme /t REG_DWORD /d 0 /f | Out-Null
 
 # ---------------------------------------------------------------- 1. default launch
-$p = Start-App
+$p = Start-App '{ "AutoHide": false, "UIScale": 0.9 }'
 if ($p) {
   $h = Panel $p
   if (-not $h) { Fail 'panel window not visible' }
@@ -109,15 +109,15 @@ if ($p) {
 }
 
 # ---------------------------------------------------------------- 2. bar (horizontal) layout
-$p = Start-App '{ "HorizontalMode": true }'
+$p = Start-App '{ "HorizontalMode": true, "AutoHide": false }'
 if ($p) { $h = Panel $p; if ($h) { Shot $h 'panel-bar' 24; Ok 'bar layout' } else { Fail 'bar layout: no panel' } }
 
 # ---------------------------------------------------------------- 3. light theme, 60% opacity, wider
-$p = Start-App '{ "Skin": "LightPure_Elegant", "Opacity": 0.6, "PanelWidth": 300 }'
+$p = Start-App '{ "Skin": "LightPure_Elegant", "Opacity": 0.6, "PanelWidth": 300, "AutoHide": false, "UIScale": 0.85 }'
 if ($p) { $h = Panel $p; if ($h) { Shot $h 'panel-light-60' 24; Ok 'light theme' } else { Fail 'light theme: no panel' } }
 
 # ---------------------------------------------------------------- 4. click-through
-$p = Start-App '{ "ClickThrough": true, "AutoHide": false }'
+$p = Start-App '{ "ClickThrough": true, "AutoHide": false, "UIScale": 0.9 }'
 if ($p) {
   $h = Panel $p
   if (-not $h) { Fail 'click-through: panel not visible' }
@@ -144,8 +144,8 @@ if ($p) { Window $p 'Monitor History' 'history' }
 $p = Start-App $null @('--open', 'hardware')
 if ($p) { Window $p 'Hardware Info' 'hardware-info' }
 $p = Start-App $null @('--open', 'themes')
-if ($p) { Window $p 'Theme Editor' 'theme-editor' 900 900 }
-Stop-App
+if ($p) { Window $p 'Theme Editor' 'theme-editor' }
+# keep this instance drawing for the PresentMon check below
 
 # ---------------------------------------------------------------- 6. errors
 $log = Join-Path $Dir 'WinMonitor_Error.log'
@@ -160,13 +160,15 @@ try {
   if ($hash -ne 'B2A706BC6AD475749E3B7E3409263AA1E6906D45BDCF993F6DBC0F660188F1AF') { Fail "PresentMon hash changed: $hash" }
   $out = Join-Path $env:RUNNER_TEMP 'pm.txt'
   $pp = Start-Process $pm -ArgumentList '--session_name WinMonitor_CI --stop_existing_session --output_stdout' -RedirectStandardOutput $out -RedirectStandardError "$out.err" -PassThru -WindowStyle Hidden
-  Start-Sleep 8
+  Start-Sleep 10
   if (-not $pp.HasExited) { Stop-Process $pp -Force }
-  $head = Get-Content $out -TotalCount 1
-  Write-Host "PresentMon first line: $head"
-  if ($head -notmatch '^Application,ProcessID') { Get-Content "$out.err" | Select-Object -First 20; Fail 'PresentMon output is not the expected CSV' } else { Ok 'PresentMon CSV' }
+  $lines = @(Get-Content $out -TotalCount 3)
+  Write-Host "PresentMon output ($((Get-Content $out).Count) lines):"; $lines | ForEach-Object { Write-Host "  $_" }
+  Write-Host "PresentMon errors:"; Get-Content "$out.err" -TotalCount 20 | ForEach-Object { Write-Host "  $_" }
+  if ($lines.Count -eq 0 -or "$($lines[0])" -notmatch '^Application,ProcessID') { Fail 'PresentMon output is not the expected CSV' } else { Ok 'PresentMon CSV' }
   logman stop WinMonitor_CI -ets 2>$null | Out-Null
 } catch { Fail "PresentMon test: $_" }
+Stop-App
 
 if ($script:failed.Count -gt 0) { Write-Host "`n$($script:failed.Count) check(s) failed:"; $script:failed | ForEach-Object { Write-Host " - $_" }; exit 1 }
 Write-Host "`nAll checks passed."

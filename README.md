@@ -66,4 +66,4 @@ msbuild WinMonitor.csproj /restore /t:Publish /p:Configuration=Release /p:Platfo
 
 ## Credits
 
-Based on [LiteMonitor](https://github.com/Diorser/LiteMonitor) (MIT), with [Halo Battery](https://github.com/HeyOkay/HaloBattery) (MIT), [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (MPL-2.0) and [WinUIEx](https://github.com/dotMorten/WinUIEx) (MIT). See [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt).
+Based on [LiteMonitor](https://github.com/Diorser/LiteMonitor) (MIT), with [Halo Battery](https://github.com/HeyOkay/HaloBattery) (MIT), [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (MPL-2.0), [Windows Community Toolkit](https://github.com/CommunityToolkit/Windows) (MIT) and [WinUIEx](https://github.com/dotMorten/WinUIEx) (MIT). See [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt).

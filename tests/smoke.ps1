@@ -250,8 +250,17 @@ $env:WINMONITOR_NO_DIALOG = $null
 $p = Start-App $null @('--open', 'settings:About')
 if ($p) {
   try {
+    # with dialogs on, the PawnIO question (no driver on the test machine) comes first: answer Not now
+    $pw = $null
+    for ($i = 0; $i -lt 20 -and -not $pw; $i++) { $pw = [W]::Find([uint32]$p.Id, 'Install the PawnIO driver?', $false) | Select-Object -First 1; if (-not $pw) { Start-Sleep -Milliseconds 500 } }
+    if ($pw) {
+      $pr = [System.Windows.Automation.AutomationElement]::FromHandle([IntPtr]$pw)
+      $nc = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, 'Not now')
+      $nb = $pr.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $nc)
+      if ($nb) { $nb.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke() }
+    }
     $win = $null
-    for ($i = 0; $i -lt 20 -and -not $win; $i++) { $win = [W]::Find([uint32]$p.Id, 'Settings - WinMonitor', $false) | Select-Object -First 1; if (-not $win) { Start-Sleep -Milliseconds 500 } }
+    for ($i = 0; $i -lt 30 -and -not $win; $i++) { $win = [W]::Find([uint32]$p.Id, 'Settings - WinMonitor', $false) | Select-Object -First 1; if (-not $win) { Start-Sleep -Milliseconds 500 } }
     if (-not $win) { throw 'settings window not found' }
     $win = [IntPtr]$win
     [W]::SetWindowPos($win, [IntPtr]::Zero, 60, 30, 900, 700, 0x40) | Out-Null

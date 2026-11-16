@@ -11,6 +11,8 @@ namespace WinMonitor
         public string Skin { get; set; } = "System";   // System (follow Windows), Light or Dark
         public bool TopMost { get; set; } = false;
         public bool AutoStart { get; set; } = false;
+        public bool CheckForUpdates { get; set; } = true;          // once a day, a tray notification when a new version is out
+        public DateTime LastUpdateCheckUtc { get; set; }
         public int RefreshMs { get; set; } = 1000;
         public double AnimationSpeed { get; set; } = 0.35;
         public ScreenPoint Position { get; set; } = new ScreenPoint(-1, -1);

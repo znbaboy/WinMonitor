@@ -75,6 +75,30 @@ namespace WinMonitor.Services
         }
 
         // =====================================================================
+        // Settings > About: driver status and a manual install / update
+        // =====================================================================
+        public static (bool Installed, string? Version, bool UpToDate) Status()
+        {
+            var info = GetPawnIOInfo();
+            return (info.Installed, info.VersionText, info.Installed && (info.Version == null || info.Version >= RequiredPawnIOVersion));
+        }
+
+        /// <summary>Asks, then installs or updates PawnIO. Returns true when the driver is ready afterwards.</summary>
+        public async Task<bool> InstallFromSettings()
+        {
+            if (Dialogs.UI?.HasThreadAccess == true) return await Task.Run(InstallFromSettings);
+            await Lock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var info = GetPawnIOInfo();
+                if (info.Installed && (info.Version == null || info.Version >= RequiredPawnIOVersion)) return true;
+                await InstallPawnIO(info, startup: false).ConfigureAwait(false);
+                return PawnIOReady();
+            }
+            finally { Lock.Release(); }
+        }
+
+        // =====================================================================
         // PawnIO
         // =====================================================================
         private enum InstallResult { Done, Skipped, Failed, ExitApp }

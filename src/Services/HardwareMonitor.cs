@@ -120,6 +120,7 @@ namespace WinMonitor.Services
 
         // Lets the app run the driver check itself (avoids prompts at a bad moment)
         public Task SmartCheckDriver() => _driverInstaller.SmartCheckDriver();
+        public Task<bool> InstallDriverFromSettings() => _driverInstaller.InstallFromSettings();
 
         // Switch hardware groups on the fly
         public void RefreshHardwareConfig()

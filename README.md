@@ -45,12 +45,13 @@ Optional: the [PawnIO](https://github.com/namazso/PawnIO.Setup) driver for CPU t
 - Separate temperature alert limit for disks
 - Portable and self-contained: no installer, no .NET needed
 - Lighter on memory (about 14 MB)
+- Update check with one-click install, and PawnIO driver install / update, in Settings > About
 
 **Removed**
 - Taskbar mode and horizontal bar layout
 - Auto-hide at screen edges
 - FPS counter (PresentMon)
-- Web view, plugins, auto-updates and non-English languages
+- Web view, plugins and non-English languages
 - The 10 bundled themes (make your own in the theme editor)
 - Extras: clean memory, prevent sleep, turn off display, scheduled shutdown, restart Explorer, refresh icons, clean temp files
 

@@ -324,6 +324,11 @@ namespace WinMonitor.UI
             return Ui.Page(
                 Ui.PageTitle(T("Menu.About")),
                 app,
+                Ui.Section("Updates"),
+                UpdateCard(),
+                Ui.Row("Check for updates automatically", Ui.Toggle(_app.Cfg.CheckForUpdates, v => { _app.Cfg.CheckForUpdates = v; Save(); }),
+                    "Once a day; a notification when a new version is out. Nothing installs without asking.", "\uE895"),
+                DriverCard(),
                 Ui.Section("Credits"),
                 Ui.Group("Open-source components", null, "The projects WinMonitor is built on", "\uE8F1",
                     Credit("LiteMonitor", "The monitor this app is based on (Diorser)", "MIT"),
@@ -338,6 +343,78 @@ namespace WinMonitor.UI
                 Ui.Section(T("Menu.Reset")),
                 Ui.Row(T("Menu.Reset"), Ui.Button(T("Menu.Reset") + "…", ResetSettings), "Deletes settings.json and restarts WinMonitor with the defaults.", "\uE777")
             );
+        }
+
+        /// <summary>WinMonitor version card: check, then download and install (sensor library and device support come with it).</summary>
+        private FrameworkElement UpdateCard()
+        {
+            var button = new Button { Content = "Check for updates" };
+            var ring = new ProgressRing { IsActive = false, Width = 20, Height = 20, Visibility = Visibility.Collapsed };
+            var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+            content.Children.Add(ring);
+            content.Children.Add(button);
+            var card = Ui.Row("WinMonitor " + AppInfo.Version, content,
+                "Updates bring support for new CPUs, GPUs and wireless devices, and fixes", "\uE777");
+
+            void Busy(bool on) { ring.IsActive = on; ring.Visibility = on ? Visibility.Visible : Visibility.Collapsed; button.IsEnabled = !on; }
+            void ShowFound(UpdateService.Release r)
+            {
+                card.Description = $"Version {r.Version.ToString(3)} is available";
+                button.Content = "Download and install";
+                button.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
+            }
+            if (_app.AvailableUpdate is { } known) ShowFound(known);
+
+            button.Click += async (_, _) =>
+            {
+                var root = Content.XamlRoot;
+                if (_app.AvailableUpdate is { } r)
+                {
+                    string notes = r.Notes.Length > 600 ? r.Notes[..600] + "…" : r.Notes;
+                    if (!await Dialogs.AskAsync($"WinMonitor {r.Version.ToString(3)} will download from GitHub, then restart.\n\n{notes}",
+                                                "Install the update?", root, "Install", "Not now")) return;
+                    Busy(true);
+                    card.Description = "Downloading…";
+                    try { await _app.InstallUpdateAsync(r); }
+                    catch (Exception ex) { Busy(false); ShowFound(r); Dialogs.Error(ex.Message, "Update failed", root); }
+                    return;
+                }
+                Busy(true);
+                try
+                {
+                    var found = await _app.CheckForUpdateAsync(quiet: false);
+                    if (found != null) ShowFound(found);
+                    else card.Description = $"You're up to date (checked {DateTime.Now:t})";
+                }
+                catch (Exception ex) { card.Description = "Couldn't reach GitHub: " + ex.Message; }
+                finally { Busy(false); }
+            };
+            return card;
+        }
+
+        /// <summary>PawnIO driver status, with install / update when it is missing or out of date.</summary>
+        private FrameworkElement DriverCard()
+        {
+            var button = new Button();
+            var card = Ui.Row("PawnIO driver", button, null, "\uE950");
+            void Refresh()
+            {
+                var (installed, version, upToDate) = DriverInstaller.Status();
+                card.Description = !installed ? "Not installed. Needed for CPU temperature, clock and power."
+                                 : upToDate ? $"Installed ({version ?? "version unknown"}), up to date"
+                                 : $"Installed ({version ?? "version unknown"}), an update is needed";
+                button.Content = !installed ? "Install" : upToDate ? "Up to date" : "Update";
+                button.IsEnabled = !upToDate;
+            }
+            Refresh();
+            button.Click += async (_, _) =>
+            {
+                button.IsEnabled = false;
+                try { await _app.Controller.Monitor.InstallDriverFromSettings(); }
+                catch (Exception ex) { Program.Log(ex); }
+                Refresh();
+            };
+            return card;
         }
 
         private async void ResetSettings()

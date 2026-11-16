@@ -91,8 +91,37 @@ namespace WinMonitor.UI
             {
                 await Task.Delay(1500);
                 await Controller.Monitor.SmartCheckDriver();
+                await Task.Delay(8000);
+                UpdateService.CleanUpOldVersion();
+                if (Cfg.CheckForUpdates && DateTime.UtcNow - Cfg.LastUpdateCheckUtc > TimeSpan.FromDays(1))
+                    await CheckForUpdateAsync(quiet: true);
             }
             catch (Exception ex) { Program.Log(ex); }
+        }
+
+        /// <summary>The newer release found by the last check, if any.</summary>
+        public UpdateService.Release? AvailableUpdate { get; private set; }
+
+        /// <summary>Checks GitHub. Quiet checks (startup) only speak up with a tray notification when there is a new version.</summary>
+        public async Task<UpdateService.Release?> CheckForUpdateAsync(bool quiet)
+        {
+            try
+            {
+                AvailableUpdate = await UpdateService.CheckAsync();
+                Cfg.LastUpdateCheckUtc = DateTime.UtcNow;
+                Cfg.Save();
+                if (AvailableUpdate != null && quiet)
+                    Notify("WinMonitor " + AvailableUpdate.Version.ToString(3) + " is available", "Open Settings > About to install it.", false);
+                return AvailableUpdate;
+            }
+            catch when (quiet) { return null; }
+        }
+
+        /// <summary>Downloads, verifies and swaps in the new WinMonitor.exe, then restarts into it.</summary>
+        public async Task InstallUpdateAsync(UpdateService.Release r)
+        {
+            await Task.Run(() => UpdateService.InstallAsync(r));
+            Restart();
         }
 
         public void Notify(string title, string text, bool warning) => _tray.Notify(title, text, warning);

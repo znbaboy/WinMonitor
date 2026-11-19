@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Linq;
 using System.IO;
 using System.Security.Principal;
 using System.Xml.Linq;
@@ -9,6 +10,7 @@ namespace WinMonitor.Services
     public static class AutoStart
     {
         private const string TaskName = "WinMonitor_AutoStart";
+        private const string TaskPriority = "5";   // normal priority (the Task Scheduler default, 7, runs the app below normal)
 
         public static void Set(bool enabled)
         {
@@ -53,12 +55,13 @@ namespace WinMonitor.Services
                         UseShellExecute = false // needed for CreateNoWindow
                     };
                     
+                    startInfo.RedirectStandardError = true;
                     using (var p = Process.Start(startInfo))
                     {
+                        string err = p?.StandardError.ReadToEnd() ?? "";
                         p?.WaitForExit();
-                        
-                        // (the exit code could be logged here)
-                        // if (p.ExitCode != 0) { ... }
+                        if (p == null || p.ExitCode != 0)
+                            Dialogs.Error("Could not set up Start with Windows." + (string.IsNullOrWhiteSpace(err) ? "" : "\n\n" + err.Trim()));
                     }
                 }
                 catch (Exception ex)
@@ -78,6 +81,7 @@ namespace WinMonitor.Services
             }
             else
             {
+                if (!IsEnabled()) return;
                 // Delete the task
                 var startInfo = new ProcessStartInfo
                 {
@@ -141,7 +145,8 @@ namespace WinMonitor.Services
 
                     // A task disabled by the user or Windows must be re-created even if its command is unchanged.
                     bool taskEnabled = !string.Equals(enabled, "false", StringComparison.OrdinalIgnoreCase);
-                    return taskEnabled && string.Equals(command, exePath, StringComparison.OrdinalIgnoreCase);
+                    string? priority = doc.Descendants().FirstOrDefault(x => x.Name.LocalName == "Priority")?.Value;
+                    return taskEnabled && priority == TaskPriority && string.Equals(command, exePath, StringComparison.OrdinalIgnoreCase);
                 }
             }
             catch
@@ -198,7 +203,7 @@ namespace WinMonitor.Services
                         new XElement(ns + "Hidden", "false"),
                         new XElement(ns + "RunOnlyIfIdle", "false"),
                         new XElement(ns + "ExecutionTimeLimit", "PT0S"),
-                        new XElement(ns + "Priority", "7")
+                        new XElement(ns + "Priority", TaskPriority)
                     ),
                     new XElement(ns + "Actions",
                         new XAttribute("Context", "Author"),

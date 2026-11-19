@@ -179,7 +179,7 @@ namespace WinMonitor.UI
                 Maximum = max,
                 SmallChange = step,
                 LargeChange = step * 10,
-                SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
+                SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Hidden,
                 Width = 130,
                 NumberFormatter = new Windows.Globalization.NumberFormatting.DecimalFormatter { FractionDigits = 0, IsGrouped = false },
             };

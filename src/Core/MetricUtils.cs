@@ -331,6 +331,7 @@ namespace WinMonitor.Core
             // are judged against their recorded maximum, not an absolute value:
             // e.g. a CPU clock at 90% of its maximum counts as high (red).
             // Otherwise 4.0 GHz might never reach a threshold.
+            if (type == MetricType.Frequency && !Settings.Load().ColorClockSpeeds) return STATE_SAFE;
             if (type is MetricType.Frequency or MetricType.Power or MetricType.RPM or MetricType.FPS or MetricType.Voltage or MetricType.Current)
             {
                  // Use GetAdaptivePercentage directly since we are already inside the adaptive type check block

@@ -195,6 +195,7 @@ if ($p) {
     else {
       $ra = $a.Current.BoundingRectangle; $rb = $b.Current.BoundingRectangle
       Drag-Mouse ([int]($ra.X + $ra.Width / 2)) ([int]($ra.Y + $ra.Height / 2)) ([int]($rb.Y + $rb.Height + 8))
+      Start-Sleep -Milliseconds 900   # settings are written 0.4 s after the last change
       $json = Get-Content "$Dir\settings.json" -Raw | ConvertFrom-Json
       $host1 = ($json.MonitorItems | Where-Object Key -eq 'DASH.HOST').SortIndex
       $time1 = ($json.MonitorItems | Where-Object Key -eq 'DASH.Time').SortIndex
@@ -207,6 +208,7 @@ if ($p) {
       if ($ua -and $ub) {
         $r1 = $ua.Current.BoundingRectangle; $r2 = $ub.Current.BoundingRectangle
         Drag-MouseY ([int]($r1.X + $r1.Width / 2)) ([int]($r1.Y + $r1.Height / 2)) ([int]($r2.Y - 4))
+        Start-Sleep -Milliseconds 900   # settings are written 0.4 s after the last change
         $json = Get-Content "$Dir\settings.json" -Raw | ConvertFrom-Json
         $d = ($json.MonitorItems | Where-Object Key -eq 'DASH.Uptime').SortIndex; $h = ($json.MonitorItems | Where-Object Key -eq 'HALO.Mouse').SortIndex
         Write-Host "DRAG CATEGORY UP: DASH.Uptime=$d HALO.Mouse=$h"
@@ -222,6 +224,7 @@ if ($p) {
       if ($ca -and $cb) {
         $r1 = $ca.Current.BoundingRectangle; $r2 = $cb.Current.BoundingRectangle
         Drag-Mouse ([int]($r1.X + $r1.Width / 2)) ([int]($r1.Y + $r1.Height / 2)) ([int]($r2.Y + $r2.Height + 12))
+        Start-Sleep -Milliseconds 900   # settings are written 0.4 s after the last change
         $json = Get-Content "$Dir\settings.json" -Raw | ConvertFrom-Json
         $d = ($json.MonitorItems | Where-Object Key -eq 'DASH.Uptime').SortIndex; $h = ($json.MonitorItems | Where-Object Key -eq 'HALO.Mouse').SortIndex
         Write-Host "DRAG CATEGORY DOWN: DASH.Uptime=$d HALO.Mouse=$h"
@@ -288,6 +291,31 @@ if ($p) {
 }
 $env:WINMONITOR_DIALOG_DEMO = $null; $env:WINMONITOR_NO_DIALOG = '1'
 Stop-App
+
+# ---------------------------------------------------------------- 5b. Start with Windows
+# turn it on in settings.json, start the app: it must register the scheduled task for this exe,
+# and running that task (what Windows does at sign-in) must start WinMonitor
+schtasks /Delete /TN WinMonitor_AutoStart /F 2>$null | Out-Null
+$j = Get-Content "$Dir\settings.json" -Raw | ConvertFrom-Json
+$j.AutoStart = $true
+$j | ConvertTo-Json -Depth 20 | Set-Content "$Dir\settings.json" -Encoding UTF8
+$p = Start-Process $exe -PassThru
+Start-Sleep 20
+$xml = (schtasks /Query /TN WinMonitor_AutoStart /XML 2>$null) -join "`n"
+if (-not $xml) { Fail 'Start with Windows: no scheduled task' }
+else {
+  $tx = [xml]$xml
+  $cmd = $tx.Task.Actions.Exec.Command; $lvl = $tx.Task.Principals.Principal.RunLevel
+  if ($cmd -eq $exe) { Ok "task runs $cmd" } else { Fail "task command is '$cmd', expected '$exe'" }
+  if ($lvl -eq 'HighestAvailable') { Ok 'task runs as administrator' } else { Fail "task run level '$lvl'" }
+  if ($tx.Task.Triggers.LogonTrigger) { Ok 'task starts at sign-in' } else { Fail 'task has no sign-in trigger' }
+  Stop-App
+  schtasks /Run /TN WinMonitor_AutoStart | Out-Null
+  Start-Sleep 15
+  if (Get-Process WinMonitor -ErrorAction SilentlyContinue) { Ok 'running the task starts WinMonitor' } else { Fail 'running the task did not start WinMonitor' }
+}
+Stop-App
+schtasks /Delete /TN WinMonitor_AutoStart /F 2>$null | Out-Null
 
 # ---------------------------------------------------------------- 6. errors
 $log = Join-Path $Data 'WinMonitor_Error.log'

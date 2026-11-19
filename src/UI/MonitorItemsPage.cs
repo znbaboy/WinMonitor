@@ -37,7 +37,7 @@ namespace WinMonitor.UI
 
             var stack = new StackPanel { Spacing = 4, Margin = new Thickness(24, 8, 24, 24), MaxWidth = 1000 };
             stack.Children.Add(Ui.PageTitle(T("Menu.MonitorItemDisplay")));
-            stack.Children.Add(Ui.Hint("Drag ≡ to reorder categories and rows. Switch a category off to hide it from the panel; its rows keep their ticks. Type over a greyed name or unit to change it; clear it to go back to automatic."));
+            stack.Children.Add(Ui.Hint("Drag ≡ to reorder categories and rows. Switch a category off to hide it from the panel; its rows keep their ticks. Type over a greyed name to rename a row (clear it to go back to automatic) and pick its unit from the list."));
             stack.Children.Add(tools);
             stack.Children.Add(_categories);
             Root = new ScrollViewer { Content = stack, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
@@ -107,7 +107,14 @@ namespace WinMonitor.UI
                 count.Text = on ? $"{items.Count(i => i.VisibleInPanel)} of {items.Count} shown" : "Hidden from the panel";
             }
 
-            foreach (var it in items) rows.Add(ItemRow(it, rows, Refresh));
+            // rows are built the first time the card opens (most cards stay closed: faster page)
+            bool built = false;
+            void Build()
+            {
+                if (built) return;
+                built = true;
+                foreach (var it in items) rows.Add(ItemRow(it, rows, Refresh));
+            }
 
             var card = new Expander
             {
@@ -119,13 +126,14 @@ namespace WinMonitor.UI
                 Tag = group,
             };
             if (Environment.GetEnvironmentVariable("WINMONITOR_EXPAND_ALL") == "1") card.IsExpanded = true;   // screenshots in the automated tests
-            card.Expanding += (_, _) => Expanded.Add(group);
+            if (card.IsExpanded) Build();
+            card.Expanding += (_, _) => { Build(); Expanded.Add(group); };
             card.Collapsed += (_, _) => Expanded.Remove(group);
             toggle.Toggled += (_, _) => { _app.SetGroupEnabled(group, toggle.IsOn); Refresh(); };
             Refresh();
 
             _categories.AttachHandle(handle, card);
-            card.DataContext = rows;   // the rows panel, read back when saving the order
+            card.DataContext = (rows, items);   // read back when saving the order
             return card;
         }
 
@@ -155,21 +163,18 @@ namespace WinMonitor.UI
                 Apply();
             });
 
-            // unit: empty = automatic, spaces = none, anything else = custom ({u} = the automatic unit)
-            string defUnit = MetricUtils.GetUnitStr(item.Key, 0, MetricUtils.UnitContext.SettingsPanel);
-            var unit = new TextBox
+            // unit: picked from a list (null = automatic, "" = none)
+            var choices = UnitChoices(item);
+            var unit = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Center };
+            foreach (var (label, _) in choices) unit.Items.Add(label);
+            unit.SelectedIndex = Math.Max(0, choices.FindIndex(c => c.Value == item.UnitPanel));
+            ToolTipService.SetToolTip(unit, "Unit");
+            unit.SelectionChanged += (_, _) =>
             {
-                Text = item.UnitPanel == null ? "" : (item.UnitPanel == "" ? " " : item.UnitPanel),
-                PlaceholderText = string.IsNullOrEmpty(defUnit) ? "unit" : defUnit,
-                VerticalAlignment = VerticalAlignment.Center,
-            };
-            ToolTipService.SetToolTip(unit, "Unit: leave empty for automatic, a space for none, {u} stands for the automatic unit (e.g. {u}/s)");
-            OnCommit(unit, () =>
-            {
-                string u = unit.Text;
-                item.UnitPanel = u.Length == 0 ? null : string.IsNullOrWhiteSpace(u) ? "" : (u == defUnit ? null : u);
+                if (unit.SelectedIndex < 0) return;
+                item.UnitPanel = choices[unit.SelectedIndex].Value;
                 Apply();
-            });
+            };
 
             CheckBox? bar = null;
             if (item.HasBar)
@@ -182,13 +187,48 @@ namespace WinMonitor.UI
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                       // handle
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(32) });                    // show
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });  // name
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });                   // unit
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(170) });                   // unit
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });                    // bar
             AddAt(row, handle, 0); AddAt(row, show, 1); AddAt(row, name, 2); AddAt(row, unit, 3);
             if (bar != null) AddAt(row, bar, 4);
             row.Tag = item;
             rows.AttachHandle(handle, row);
             return row;
+        }
+
+        /// <summary>Unit options for a row: automatic, a few spellings that fit its kind of value, and none.
+        /// Units are labels only (no conversion). A custom unit from an older version stays selectable.</summary>
+        private static List<(string Label, string? Value)> UnitChoices(MonitorItemConfig item)
+        {
+            string auto = MetricUtils.GetUnitStr(item.Key, 0, MetricUtils.UnitContext.SettingsPanel);
+            string Show(string u) => u.Replace("{u}", "KB").Trim();
+            var list = new List<(string, string?)> { (string.IsNullOrWhiteSpace(auto) ? "Automatic" : $"Automatic ({Show(auto)})", null) };
+
+            string[] extra = MetricUtils.GetType(item.Key) switch
+            {
+                MetricType.Percent => new[] { "%", " %" },
+                MetricType.Memory => auto == "%" ? new[] { "%", " %" } : new[] { "{u}", " {u}" },
+                MetricType.Temperature => new[] { "°C", " °C", "°" },
+                MetricType.Frequency => new[] { "GHz", " GHz" },
+                MetricType.Power => new[] { "W", " W" },
+                MetricType.Voltage => new[] { "V", " V" },
+                MetricType.Current => new[] { "A", " A" },
+                MetricType.RPM => new[] { " RPM", " rpm", "RPM" },
+                MetricType.FPS => new[] { " FPS", "FPS" },
+                MetricType.DataSpeed => new[] { "{u}/s", " {u}/s", "{u}ps", "{u}" },
+                MetricType.DataSize => new[] { "{u}", " {u}" },
+                _ => Array.Empty<string>(),
+            };
+            foreach (var u in extra)
+            {
+                if (u == auto) continue;
+                string label = Show(u) + (u.StartsWith(' ') ? " (with space)" : auto.StartsWith(' ') && !u.StartsWith(' ') ? " (no space)" : "");
+                if (u.Contains("{u}")) label = label.Replace("KB", "KB, MB…");
+                list.Add((label, u));
+            }
+            if (item.UnitPanel is { Length: > 0 } custom && !list.Exists(c => c.Item2 == custom)) list.Add((Show(custom) + " (custom)", custom));
+            list.Add(("None", ""));
+            return list;
         }
 
         /// <summary>The name a row has without a custom one (live name, else the built-in text).</summary>
@@ -245,9 +285,12 @@ namespace WinMonitor.UI
         {
             int idx = 0;
             foreach (var card in _categories.Children.OfType<Expander>())
-                if (card.DataContext is ReorderPanel rows)
+                if (card.DataContext is (ReorderPanel rows, List<MonitorItemConfig> items))
+                {
+                    if (rows.Children.Count == 0) { foreach (var item in items) item.SortIndex = idx++; continue; }   // never opened
                     foreach (var row in rows.Children.OfType<FrameworkElement>())
                         if (row.Tag is MonitorItemConfig item) item.SortIndex = idx++;
+                }
             _cfg.MonitorItems = _cfg.MonitorItems.OrderBy(x => x.SortIndex).ToList();
             Apply();
         }
@@ -255,8 +298,8 @@ namespace WinMonitor.UI
         private void Apply()
         {
             _cfg.SyncToLanguage();   // custom names win over the built-in texts
-            _cfg.Save();
-            _app.ApplyMonitorLayout();
+            _app.SaveSettingsSoon();
+            _app.ApplyMonitorLayoutSoon();
         }
     }
 

@@ -89,6 +89,8 @@ namespace WinMonitor.UI
         {
             try
             {
+                // keep Start with Windows pointing at this exe (the folder may have moved since it was set)
+                if (Cfg.AutoStart) _ = Task.Run(() => AutoStart.Set(true));
                 await Task.Delay(1500);
                 await Controller.Monitor.SmartCheckDriver();
                 await Task.Delay(8000);
@@ -384,10 +386,48 @@ namespace WinMonitor.UI
             SystemActions.RestartApplication();
         }
 
+        private Microsoft.UI.Dispatching.DispatcherQueueTimer? _saveTimer, _layoutTimer;
+
+        /// <summary>Writes settings.json shortly after the last change (one write for a burst of edits).</summary>
+        public void SaveSettingsSoon()
+        {
+            if (_saveTimer == null)
+            {
+                _saveTimer = Panel.DispatcherQueue.CreateTimer();
+                _saveTimer.Interval = TimeSpan.FromMilliseconds(400);
+                _saveTimer.IsRepeating = false;
+                _saveTimer.Tick += (_, _) => Cfg.Save();
+            }
+            _saveTimer.Stop();
+            _saveTimer.Start();
+        }
+
+        /// <summary>Rebuilds the panel shortly after the last change (ticking several rows rebuilds once).</summary>
+        public void ApplyMonitorLayoutSoon()
+        {
+            if (_layoutTimer == null)
+            {
+                _layoutTimer = Panel.DispatcherQueue.CreateTimer();
+                _layoutTimer.Interval = TimeSpan.FromMilliseconds(150);
+                _layoutTimer.IsRepeating = false;
+                _layoutTimer.Tick += (_, _) => ApplyMonitorLayout();
+            }
+            _layoutTimer.Stop();
+            _layoutTimer.Start();
+        }
+
+        /// <summary>Writes pending settings now (a settings window closed, or the app exits).</summary>
+        public void FlushSettings()
+        {
+            if (_saveTimer?.IsRunning == true) { _saveTimer.Stop(); Cfg.Save(); }
+            if (_layoutTimer?.IsRunning == true) { _layoutTimer.Stop(); ApplyMonitorLayout(); }
+        }
+
         public void SaveAll()
         {
             try
             {
+                _saveTimer?.Stop();
                 Panel.SavePosition();
                 Cfg.Save();
                 TrafficLogger.Save();

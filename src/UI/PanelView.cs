@@ -26,7 +26,6 @@ namespace WinMonitor.UI
     /// </summary>
     internal sealed class PanelView
     {
-        private const double NoBarRowFactor = 0.72;   // height of a row whose bar is off, relative to a bar row
 
         public Grid Root { get; } = new();
         private readonly Border _background = new();
@@ -98,6 +97,7 @@ namespace WinMonitor.UI
                 FontWeight = Font(valueFont).Weight,
                 Foreground = Brush(color),
                 TextWrapping = TextWrapping.NoWrap,
+                IsColorFontEnabled = !Settings.Load().MonochromeEmoji,
                 TextTrimming = TextTrimming.None,
                 IsHitTestVisible = false,
             };
@@ -152,11 +152,15 @@ namespace WinMonitor.UI
             float s = L.LayoutScale <= 0 ? 1f : L.LayoutScale;
 
             int innerPad = (int)(10 * s), innerPadTotal = innerPad * 2;
-            int barMinH = (int)(4 * s), barBotGap = (int)(3 * s);
+            int barMinH = (int)(4 * s);
             int x = L.Padding - 1;   // LiteMonitor's visual compensation
             int y = L.Padding;
             int w = L.Width - L.Padding * 2;
             int rowH = L.RowHeight;
+            int textH = (int)(rowH * 0.60);                         // a row's text line
+            int barH = Math.Max(barMinH, (int)(rowH * 0.20));       // its bar, right under the text
+            int barGap = Math.Max(1, (int)(2 * s));
+            int rowGap = rowH - (textH + barGap + barH) + L.ItemGap; // same pitch as before for rows with a bar
             int groupLineH = LineH(t.Font.Group);
             bool hasTitle = showTitle && !string.IsNullOrEmpty(title);
 
@@ -177,7 +181,7 @@ namespace WinMonitor.UI
                 int startY = itemY;
                 int listRowH = (int)(rowH * 0.8);
                 var buffer = new List<MetricItem>();
-                bool lastAddedGap = false;
+                int lastGap = 0;
 
                 void Flush()
                 {
@@ -210,34 +214,25 @@ namespace WinMonitor.UI
                         buffer.Add(it);
                         if (buffer.Count >= 2) Flush();
                     }
-                    else if (it.BoundConfig != null && !it.BoundConfig.ShowBar)
-                    {
-                        Flush();
-                        int h = (int)(rowH * NoBarRowFactor);
-                        it.Style = MetricRenderStyle.StandardBar;
-                        var inner = new Rect(x + innerPad, itemY, w - innerPadTotal, h);
-                        itemRects[it] = (inner, inner, Rect.Empty, new Rect(x, itemY, w, h));
-                        itemY += h + L.ItemGap;
-                        lastAddedGap = true;
-                    }
                     else
                     {
+                        // text line, then the bar hugging it; every row is followed by the same gap,
+                        // so rows with and without a bar space out evenly
                         Flush();
                         it.Style = MetricRenderStyle.StandardBar;
-                        var inner = new Rect(x + innerPad, itemY, w - innerPadTotal, rowH);
-                        int topH = (int)(inner.Height * 0.60);
-                        var top = new Rect(inner.X, inner.Y, inner.Width, topH);
-                        int barH = Math.Max(barMinH, (int)(inner.Height * 0.23));
-                        int barY = (int)(inner.Y + inner.Height) - barH - barBotGap;
-                        itemRects[it] = (top, top, new Rect(inner.X, barY, inner.Width, barH), new Rect(x, itemY, w, rowH));
-                        itemY += rowH + L.ItemGap;
-                        lastAddedGap = true;
+                        bool withBar = it.BoundConfig == null || it.BoundConfig.ShowBar;
+                        int h = withBar ? textH + barGap + barH : textH;
+                        var top = new Rect(x + innerPad, itemY, w - innerPadTotal, textH);
+                        var bar = withBar ? new Rect(top.X, itemY + textH + barGap, top.Width, barH) : Rect.Empty;
+                        itemRects[it] = (top, top, bar, new Rect(x, itemY, w, h));
+                        itemY += h + rowGap;
+                        lastGap = rowGap;
                     }
                 }
                 Flush();
 
                 int content = itemY - startY;
-                if (!isDash && !twoCol && content > 0 && lastAddedGap) content -= L.ItemGap;
+                if (!isDash && !twoCol && content > 0) content -= lastGap;
                 int groupH = gp * 2 + content;
                 groupRects.Add(new Rect(x, y, w, groupH));
                 y += idx < groups.Count - 1 ? groupH + L.GroupSpacing + L.GroupBottom : groupH;

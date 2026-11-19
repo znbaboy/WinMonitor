@@ -25,6 +25,7 @@ namespace WinMonitor.UI
         {
             _app = app;
             _cfg = app.Cfg;
+            Closed += (_, _) => _app.FlushSettings();
 
             _nav = new NavigationView
             {
@@ -60,7 +61,7 @@ namespace WinMonitor.UI
             else _nav.SelectedItem = item;
         }
 
-        private void Save() => _cfg.Save();
+        private void Save() => _app.SaveSettingsSoon();   // one write after a burst of changes
 
         // ================================================================== Panel
         private UIElement PanelPage()
@@ -83,6 +84,8 @@ namespace WinMonitor.UI
                     i => { c.Opacity = opacities[i]; Save(); _app.ApplyWindowAttributes(); }, 120), null, "\uE706"),
                 Ui.Row(T("Menu.ShowTitle"), Ui.Toggle(c.ShowTitle, v => { c.ShowTitle = v; Save(); _app.ApplyThemeAndLayout(retainData: true); }),
                     "Category names above each group", "\uE8D2"),
+                Ui.Row("Monochrome emoji", Ui.Toggle(c.MonochromeEmoji, v => { c.MonochromeEmoji = v; Save(); _app.ApplyThemeAndLayout(retainData: true); }),
+                    "Category emojis in the text colour instead of full colour", "\uE76E"),
 
                 Ui.Section("Behaviour"),
                 Ui.Row(T("Menu.TopMost"), Ui.Toggle(c.TopMost, v => { c.TopMost = v; Save(); _app.ApplyWindowAttributes(); }), null, "\uE718"),
@@ -162,6 +165,8 @@ namespace WinMonitor.UI
 
                 Ui.Section("Colours"),
                 Ui.Hint(T("Menu.ThresholdsTips")),
+                Ui.Row("Colour clock speeds", Ui.Toggle(c.ColorClockSpeeds, v => { c.ColorClockSpeeds = v; Save(); }),
+                    "Yellow and red when a CPU or GPU clock nears its maximum", "\uEC4A"),
                 Ui.Row(T("Menu.HardwareLoad"), Threshold(c.Thresholds.Load, "%"), null, "\uE9D9"),
                 Ui.Row(T("Menu.HardwareTemp"), Threshold(c.Thresholds.Temp, "°C"), null, "\uE7BA"),
                 Ui.Row(T("Menu.DiskIOSpeed"), Threshold(c.Thresholds.DiskIOMB, "MB/s"), null, "\uEDA2"),

@@ -212,7 +212,7 @@ namespace WinMonitor.UI
         {
             if (!_cfg.AlertBatteryEnabled) { _batteryAlerted.Clear(); return; }
             int low = _cfg.AlertBatteryThreshold;
-            var lines = new List<string>();
+            var lowDevices = new List<(string Name, string Level)>();
             foreach (var d in HaloBatteryService.Connected())
             {
                 if (d.Charging || d.Level > low + 5) { _batteryAlerted.Remove(d.Key); continue; }
@@ -220,10 +220,16 @@ namespace WinMonitor.UI
                 _batteryAlerted.Add(d.Key);
                 var row = _cfg.MonitorItems.FirstOrDefault(x => x.Key == "HALO." + d.Type);
                 string name = !string.IsNullOrWhiteSpace(row?.UserLabel) ? row!.UserLabel : d.Name;
-                lines.Add($"{name}: \U0001F50B{(d.Approx ? "~" : "")}{d.Level}%");
+                lowDevices.Add((name, $"{(d.Approx ? "about " : "")}{d.Level}%"));
             }
-            if (lines.Count == 0) return;
-            Notify?.Invoke($"{LanguageManager.T("Menu.AlertBattery")} (≤{low}%)", string.Join("\n", lines));
+            if (lowDevices.Count == 0) return;
+
+            // one device: "Razer DeathAdder V3 HyperSpeed is at 5%" / "Charge it soon."
+            // several:    "2 devices need charging" / one "Name: 5%" line each
+            if (lowDevices.Count == 1)
+                Notify?.Invoke($"{lowDevices[0].Name} is at {lowDevices[0].Level}", "Battery is low. Charge it soon.");
+            else
+                Notify?.Invoke($"{lowDevices.Count} devices need charging", string.Join("\n", lowDevices.Select(x => $"{x.Name}: {x.Level}")));
         }
 
         private void CheckTemperatureAlert()

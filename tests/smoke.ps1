@@ -295,13 +295,13 @@ Stop-App
 # ---------------------------------------------------------------- 5b. Start with Windows
 # turn it on in settings.json, start the app: it must register the scheduled task for this exe,
 # and running that task (what Windows does at sign-in) must start WinMonitor
-schtasks /Delete /TN WinMonitor_AutoStart /F 2>$null | Out-Null
+cmd /c "schtasks /Delete /TN WinMonitor_AutoStart /F >nul 2>schtasks /Delete /TN WinMonitor_AutoStart /F 2>$null | Out-Null1"
 $j = Get-Content "$Dir\settings.json" -Raw | ConvertFrom-Json
 $j.AutoStart = $true
 $j | ConvertTo-Json -Depth 20 | Set-Content "$Dir\settings.json" -Encoding UTF8
 $p = Start-Process $exe -PassThru
 Start-Sleep 20
-$xml = (schtasks /Query /TN WinMonitor_AutoStart /XML 2>$null) -join "`n"
+$xml = (cmd /c "schtasks /Query /TN WinMonitor_AutoStart /XML 2>nul") -join "`n"
 if (-not $xml) { Fail 'Start with Windows: no scheduled task' }
 else {
   $tx = [xml]$xml
@@ -310,12 +310,12 @@ else {
   if ($lvl -eq 'HighestAvailable') { Ok 'task runs as administrator' } else { Fail "task run level '$lvl'" }
   if ($tx.Task.Triggers.LogonTrigger) { Ok 'task starts at sign-in' } else { Fail 'task has no sign-in trigger' }
   Stop-App
-  schtasks /Run /TN WinMonitor_AutoStart | Out-Null
+  cmd /c "schtasks /Run /TN WinMonitor_AutoStart >nul 2>&1"
   Start-Sleep 15
   if (Get-Process WinMonitor -ErrorAction SilentlyContinue) { Ok 'running the task starts WinMonitor' } else { Fail 'running the task did not start WinMonitor' }
 }
 Stop-App
-schtasks /Delete /TN WinMonitor_AutoStart /F 2>$null | Out-Null
+cmd /c "schtasks /Delete /TN WinMonitor_AutoStart /F >nul 2>schtasks /Delete /TN WinMonitor_AutoStart /F 2>$null | Out-Null1"
 
 # ---------------------------------------------------------------- 6. errors
 $log = Join-Path $Data 'WinMonitor_Error.log'

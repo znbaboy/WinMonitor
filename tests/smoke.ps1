@@ -295,7 +295,7 @@ Stop-App
 # ---------------------------------------------------------------- 5b. Start with Windows
 # turn it on in settings.json, start the app: it must register the scheduled task for this exe,
 # and running that task (what Windows does at sign-in) must start WinMonitor
-cmd /c "schtasks /Delete /TN WinMonitor_AutoStart /F >nul 2>schtasks /Delete /TN WinMonitor_AutoStart /F 2>$null | Out-Null1"
+cmd /c "schtasks /Delete /TN WinMonitor_AutoStart /F >nul 2>&1"
 $j = Get-Content "$Dir\settings.json" -Raw | ConvertFrom-Json
 $j.AutoStart = $true
 $j | ConvertTo-Json -Depth 20 | Set-Content "$Dir\settings.json" -Encoding UTF8
@@ -315,7 +315,7 @@ else {
   if (Get-Process WinMonitor -ErrorAction SilentlyContinue) { Ok 'running the task starts WinMonitor' } else { Fail 'running the task did not start WinMonitor' }
 }
 Stop-App
-cmd /c "schtasks /Delete /TN WinMonitor_AutoStart /F >nul 2>schtasks /Delete /TN WinMonitor_AutoStart /F 2>$null | Out-Null1"
+cmd /c "schtasks /Delete /TN WinMonitor_AutoStart /F >nul 2>&1"
 
 # ---------------------------------------------------------------- 6. errors
 $log = Join-Path $Data 'WinMonitor_Error.log'

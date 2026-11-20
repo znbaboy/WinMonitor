@@ -97,7 +97,9 @@ namespace WinMonitor
         public bool IsGroupEnabled(string group) => !DisabledGroups.Contains(group);
 
         /// <summary>Is this row on the panel? Ticked, and its category is on.</summary>
-        public bool IsShown(MonitorItemConfig item) => item.VisibleInPanel && IsGroupEnabled(item.UIGroup);
+        /// <summary>Laptop battery rows are never shown on a PC without a battery.</summary>
+        public bool IsShown(MonitorItemConfig item) =>
+            item.VisibleInPanel && IsGroupEnabled(item.UIGroup) && (SystemBattery.Present || !SystemBattery.IsLaptopRow(item.Key));
 
         // show the "WinMonitor" title at the top of the panel
         public bool ShowTitle { get; set; } = true;
@@ -189,6 +191,8 @@ namespace WinMonitor
                     CachedDashColorKey = UIUtils.Intern(sub + ".Color");
                     CachedDashUnitKey = UIUtils.Intern(sub + ".Unit");
                 }
+                else if (_key.StartsWith("BAT."))
+                    CachedUIGroup = "HALO";   // laptop battery and wireless devices share one Battery category
                 else
                     CachedUIGroup = UIUtils.Intern(_key.Split('.')[0]); 
                 

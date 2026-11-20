@@ -89,6 +89,13 @@ namespace WinMonitor.UI
 
             var inner = new StackPanel { Spacing = 0 };
             inner.Children.Add(rename);
+            if (!SystemBattery.Present && items.Exists(i => SystemBattery.IsLaptopRow(i.Key)))
+                inner.Children.Add(new InfoBar
+                {
+                    IsOpen = true, IsClosable = false, Severity = InfoBarSeverity.Informational,
+                    Message = "No laptop battery found on this PC, so the laptop battery rows are hidden.",
+                    Margin = new Thickness(36, 0, 0, 8),
+                });
             inner.Children.Add(rows);
             // a Control, so switching the category off disables everything inside it
             var body = new ContentControl
@@ -104,7 +111,8 @@ namespace WinMonitor.UI
                 bool on = toggle.IsOn;
                 body.IsEnabled = on;
                 body.Opacity = on ? 1 : 0.5;
-                count.Text = on ? $"{items.Count(i => i.VisibleInPanel)} of {items.Count} shown" : "Hidden from the panel";
+                var usable = items.Where(i => SystemBattery.Present || !SystemBattery.IsLaptopRow(i.Key)).ToList();
+                count.Text = on ? $"{usable.Count(i => i.VisibleInPanel)} of {usable.Count} shown" : "Hidden from the panel";
             }
 
             // rows are built the first time the card opens (most cards stay closed: faster page)
@@ -113,7 +121,12 @@ namespace WinMonitor.UI
             {
                 if (built) return;
                 built = true;
-                foreach (var it in items) rows.Add(ItemRow(it, rows, Refresh));
+                foreach (var it in items)
+                {
+                    var row = ItemRow(it, rows, Refresh);
+                    if (!SystemBattery.Present && SystemBattery.IsLaptopRow(it.Key)) row.Visibility = Visibility.Collapsed;   // kept for the saved order
+                    rows.Add(row);
+                }
             }
 
             var card = new Expander

@@ -1,7 +1,7 @@
 {
   "Title": "⚡️WinMonitor",
   "Groups": {
-    "HALO": "🔋Devices",
+    "HALO": "🔋Battery",
     "DASH": "ℹ️Dashboard",
     "CPU": "💻CPU",
     "GPU": "🎮GPU",
@@ -21,10 +21,10 @@
     "DASH.Time": "Time",
     "DASH.IP": "Local IP",
     "DASH.Uptime": "Uptime",
-    "BAT.Percent": "Battery",
-    "BAT.Power": "Bat Pwr",
-    "BAT.Voltage": "Bat Volt",
-    "BAT.Current": "Bat Curr",
+    "BAT.Percent": "Laptop battery",
+    "BAT.Power": "Battery power",
+    "BAT.Voltage": "Battery voltage",
+    "BAT.Current": "Battery current",
     "CPU.Load": "CPU Usage",
     "CPU.Temp": "CPU Temp",
     "CPU.Clock": "CPU Clock",

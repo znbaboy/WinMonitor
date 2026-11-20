@@ -51,6 +51,9 @@ namespace WinMonitor
             // actions 3 (traffic history) and 5 (web display) no longer exist
             if (s.MainFormDoubleClickAction is not (1 or 2 or 5)) s.MainFormDoubleClickAction = 2;   // removed actions open Settings
             if (s.Skin == "Windows11_Dark") s.Skin = ThemeManager.DarkDefault;                    // 1.0.0 names
+            if (s.DisabledGroups.Remove("BAT"))   // 1.0.0 had a separate Battery category: keep it hidden by unticking its rows
+                foreach (var it in s.MonitorItems) if (SystemBattery.IsLaptopRow(it.Key)) it.VisibleInPanel = false;
+            s.GroupAliases.Remove("BAT");
             foreach (var it in s.MonitorItems)   // 1.0.0 device names had emojis; drop them if saved as custom names
                 if (it.Key.StartsWith("HALO.") && it.UserLabel is { Length: > 0 } l && l.EndsWith(" " + it.Key[5..]) && !char.IsLetterOrDigit(l[0]))
                     it.UserLabel = "";
@@ -186,10 +189,10 @@ namespace WinMonitor
                 new MonitorItemConfig { Key = "CASE.Fan",  SortIndex = 405, VisibleInPanel = false },
                 
                 // BATTERY (New Group)
-                new MonitorItemConfig { Key = "BAT.Percent", SortIndex = 501, VisibleInPanel = false },
+                new MonitorItemConfig { Key = "BAT.Percent", SortIndex = 146, VisibleInPanel = false },
                 new MonitorItemConfig { Key = "BAT.Power",   SortIndex = 502, VisibleInPanel = false },
-                new MonitorItemConfig { Key = "BAT.Voltage", SortIndex = 503, VisibleInPanel = false },
-                new MonitorItemConfig { Key = "BAT.Current", SortIndex = 504, VisibleInPanel = false },
+                new MonitorItemConfig { Key = "BAT.Voltage", SortIndex = 148, VisibleInPanel = false },
+                new MonitorItemConfig { Key = "BAT.Current", SortIndex = 149, VisibleInPanel = false },
 
                 // DISK IO
                 new MonitorItemConfig { Key = "DISK.Read", SortIndex = 601, VisibleInPanel = true },

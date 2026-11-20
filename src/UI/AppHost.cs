@@ -320,6 +320,7 @@ namespace WinMonitor.UI
                 };
                 foreach (var item in g.OrderBy(x => x.SortIndex))
                 {
+                    if (!SystemBattery.Present && SystemBattery.IsLaptopRow(item.Key)) continue;   // no laptop battery here
                     var it = item;
                     string label = ItemName(it);
                     sub.Add(new MenuEntry

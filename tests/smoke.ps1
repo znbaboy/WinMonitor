@@ -317,6 +317,19 @@ else {
 Stop-App
 cmd /c "schtasks /Delete /TN WinMonitor_AutoStart /F >nul 2>&1"
 
+# ---------------------------------------------------------------- 5c. custom names with emojis survive a restart
+$j = Get-Content "$Dir\settings.json" -Raw | ConvertFrom-Json
+($j.MonitorItems | Where-Object Key -eq 'HALO.Mouse').UserLabel = "$([char]::ConvertFromUtf32(0x1F5B1)) My mouse"
+$j.AutoStart = $false
+$j.LastUpdateCheckUtc = '2000-01-01T00:00:00Z'   # the update check saves settings.json a few seconds after start
+$j | ConvertTo-Json -Depth 20 | Set-Content "$Dir\settings.json" -Encoding UTF8
+$p = Start-Process $exe -PassThru
+Start-Sleep 30
+Stop-App
+$j = Get-Content "$Dir\settings.json" -Raw -Encoding UTF8 | ConvertFrom-Json
+$label = ($j.MonitorItems | Where-Object Key -eq 'HALO.Mouse').UserLabel
+if ($label -eq "$([char]::ConvertFromUtf32(0x1F5B1)) My mouse") { Ok 'emoji name kept after restart' } else { Fail "emoji name lost after restart (now '$label')" }
+
 # ---------------------------------------------------------------- 6. errors
 $log = Join-Path $Data 'WinMonitor_Error.log'
 if (Test-Path $log) { Get-Content $log | Select-Object -First 80; Fail 'WinMonitor_Error.log was written' } else { Ok 'no error log' }

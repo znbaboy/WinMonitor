@@ -51,13 +51,10 @@ namespace WinMonitor
             // actions 3 (traffic history) and 5 (web display) no longer exist
             if (s.MainFormDoubleClickAction is not (1 or 2 or 5)) s.MainFormDoubleClickAction = 2;   // removed actions open Settings
             if (s.Skin == "Windows11_Dark") s.Skin = ThemeManager.DarkDefault;                    // 1.0.0 names
+            else if (s.Skin == "Windows11_Light") s.Skin = ThemeManager.LightDefault;
             if (s.DisabledGroups.Remove("BAT"))   // 1.0.0 had a separate Battery category: keep it hidden by unticking its rows
                 foreach (var it in s.MonitorItems) if (SystemBattery.IsLaptopRow(it.Key)) it.VisibleInPanel = false;
             s.GroupAliases.Remove("BAT");
-            foreach (var it in s.MonitorItems)   // 1.0.0 device names had emojis; drop them if saved as custom names
-                if (it.Key.StartsWith("HALO.") && it.UserLabel is { Length: > 0 } l && l.EndsWith(" " + it.Key[5..]) && !char.IsLetterOrDigit(l[0]))
-                    it.UserLabel = "";
-            else if (s.Skin == "Windows11_Light") s.Skin = ThemeManager.LightDefault;
             if (s.Skin != ThemeManager.SystemMode && !ThemeManager.IsBuiltIn(s.Skin) && !File.Exists(Path.Combine(ThemeManager.ThemeDir, s.Skin + ".json")))
                 s.Skin = ThemeManager.SystemMode;                                                 // theme file missing: follow Windows
 

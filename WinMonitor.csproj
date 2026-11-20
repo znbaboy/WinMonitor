@@ -30,7 +30,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <Product>WinMonitor</Product>
     <Description>Hardware and wireless-device battery monitor</Description>
     <DebugType>none</DebugType>

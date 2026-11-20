@@ -219,7 +219,6 @@ namespace WinMonitor
 
         // Custom unit
         // null/"Auto" = automatic (default), "" = none, "{u}/s" = custom format
-        public string UnitPanel { get; set; } = null; 
         public bool VisibleInPanel { get; set; } = true;
 
         // draw the bar under this item (only matters when HasBar)

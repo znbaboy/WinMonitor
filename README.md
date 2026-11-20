@@ -9,7 +9,7 @@ Free and open source (MIT). Portable: unzip and run.
 
 - CPU, GPU, memory, disks, network, motherboard, laptop battery and daily traffic
 - Wireless mouse, keyboard, headset and controller batteries
-- Dark, Light or custom themes; per-row bars, names and units
+- Dark, Light or custom themes; per-row bars and names
 - Temperature and battery alerts
 - 7-day history with CSV export
 - Click-through, always on top, keep on screen
@@ -41,6 +41,7 @@ Optional: the [PawnIO](https://github.com/namazso/PawnIO.Setup) driver for CPU t
 - Wireless device batteries (from Halo Battery): Razer, Logitech, PlayStation, Xbox and Bluetooth, with a low battery alert
 - Built-in Dark and Light themes, or follow Windows
 - Simpler Monitor Items page: collapsible categories, drag to reorder, rename in place, switch whole categories off
+- One Battery category for laptop and wireless devices; laptop rows hidden on PCs without a battery
 - History keeps hidden items that are already being read; optional min–max shading
 - Separate temperature alert limit for disks
 - Portable and self-contained: no installer, no .NET needed

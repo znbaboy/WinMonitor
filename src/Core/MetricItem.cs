@@ -139,7 +139,7 @@ namespace WinMonitor
                  cfg = Settings.Load().MonitorItems.FirstOrDefault(x => x.Key == Key);
             }
             
-            string? userFormat = cfg?.UnitPanel;   // one unit setting for both layouts
+            string? userFormat = null;   // units are always the reported ones
             HasCustomUnit = !string.IsNullOrEmpty(userFormat);
 
             // 3. Dashboard items: return their text
@@ -178,7 +178,7 @@ namespace WinMonitor
                 // Build the normal and the compact text
                 
                 // 1. Panel text
-                string? userFmtPanel = cfg?.UnitPanel;
+                string? userFmtPanel = null;
                 string valNormal = MetricUtils.GetValueStr(Key, DisplayValue, false, userFmtPanel);
                 string unitNormal = MetricUtils.GetUnitStr(Key, DisplayValue, MetricUtils.UnitContext.Panel);
                 
@@ -187,7 +187,7 @@ namespace WinMonitor
 
                 // 2. Compact text (short units)
                 // Compact text uses the compact unit context (e.g. no /s)
-                string? userFmtTaskbar = cfg?.UnitPanel;   // the compact text uses the panel unit
+                string? userFmtTaskbar = null;
                 bool hasCustomTaskbar = !string.IsNullOrEmpty(userFmtTaskbar);
                 
                 // Automatic unit: compact number and short unit

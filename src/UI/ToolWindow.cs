@@ -21,6 +21,10 @@ namespace WinMonitor.UI
         public IntPtr Hwnd { get; }
         protected Grid Shell { get; } = new();
         protected TitleBar Bar { get; }
+        private string _windowTitle;
+
+        /// <summary>The taskbar / Alt+Tab name. The title bar control rewrites Window.Title when it loads, so it is put back.</summary>
+        protected void SetWindowTitle(string title) { _windowTitle = title; Title = title; }
 
         protected ToolWindow(string title, int widthDip, int heightDip)
         {
@@ -45,6 +49,8 @@ namespace WinMonitor.UI
             };
             Shell.Children.Add(Bar);
             SetTitleBar(Bar);
+            _windowTitle = title;
+            Bar.Loaded += (_, _) => Title = _windowTitle;
             AppWindow.TitleBar.PreferredHeightOption = Microsoft.UI.Windowing.TitleBarHeightOption.Tall;
 
             if (MicaController.IsSupported()) SystemBackdrop = new MicaBackdrop();

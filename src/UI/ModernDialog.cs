@@ -44,7 +44,7 @@ namespace WinMonitor.UI
 
             public DialogWindow(string title, string text, string primary, string? secondary) : base("WinMonitor", WidthDip, 220)
             {
-                Title = title;   // taskbar / Alt+Tab name; the caption row keeps "WinMonitor"
+                SetWindowTitle(title);   // taskbar / Alt+Tab name; the caption row keeps "WinMonitor"
                 var presenter = OverlappedPresenter.CreateForDialog();
                 presenter.IsResizable = false;
                 presenter.IsAlwaysOnTop = true;

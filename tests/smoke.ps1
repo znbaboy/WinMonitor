@@ -108,7 +108,11 @@ function Shot([IntPtr]$h, [string]$name, [int]$margin = 0, [bool]$dwm = $false) 
 
 function Window($p, [string]$title, [string]$name, [int]$w = 900, [int]$h = 700) {
   $win = [W]::Find([uint32]$p.Id, $title, $false) | Select-Object -First 1
-  if (-not $win) { Fail "window '$title' not found"; return }
+  if (-not $win) {
+    $all = ([W]::Find([uint32]$p.Id, '', $false) | ForEach-Object { $sb = New-Object System.Text.StringBuilder 256; [W]::GetWindowText($_, $sb, 256) | Out-Null; "'$($sb.ToString())'" }) -join ', '
+    $alive = if (Get-Process -Id $p.Id -ErrorAction SilentlyContinue) { 'running' } else { "exited $($p.ExitCode)" }
+    Fail "window '$title' not found (app $alive; windows: $all)"; return
+  }
   [W]::SetWindowPos($win, [IntPtr]::Zero, 60, 30, $w, $h, 0x40) | Out-Null
   [W]::SetForegroundWindow($win) | Out-Null
   Start-Sleep 3

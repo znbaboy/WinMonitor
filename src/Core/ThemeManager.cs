@@ -262,7 +262,7 @@ namespace WinMonitor.Core
             Version = 3,
             Layout = new LayoutConfig
             {
-                Width = 240, LayoutScale = 1, RowHeight = 38, Padding = 10, CornerRadius = 8, GroupRadius = 4, GroupPadding = 10,
+                Width = 240, LayoutScale = 1, RowHeight = 38, Padding = 8, CornerRadius = 10, GroupRadius = 8, GroupPadding = 12,
                 GroupSpacing = 30, GroupBottom = 0, ItemGap = 4, GroupTitleOffset = 6,
             },
             Font = new FontConfig

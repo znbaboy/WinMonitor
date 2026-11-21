@@ -113,7 +113,10 @@ namespace WinMonitor.UI
             var item = _cfg.MonitorItems.FirstOrDefault(x => x.Key.Equals(key, StringComparison.OrdinalIgnoreCase));
             string l = item != null ? MetricLabelResolver.ResolveLabel(item) : "";
             if (string.IsNullOrWhiteSpace(l)) l = LanguageManager.T("Items." + key);
-            return string.IsNullOrWhiteSpace(l) ? key : l;
+            if (string.IsNullOrWhiteSpace(l)) return key;
+            // CPU and GPU rows share short names ("Temp"); the chart mixes them, so say which
+            string grp = key.Split('.')[0];
+            return grp is "CPU" or "GPU" && !l.Contains(grp, StringComparison.OrdinalIgnoreCase) ? grp + " " + l : l;
         }
 
         private static string Unit(string key) => MetricUtils.GetType(key) switch

@@ -70,15 +70,14 @@ namespace WinMonitor.UI
             // body: category name, then the rows
             string defName = LanguageManager.GetOriginal("Groups." + group);
             if (defName.StartsWith("Groups.")) defName = group;
-            var rename = new TextBox
+            var renameBox = new TextBox
             {
-                Header = "Category name",
                 PlaceholderText = defName,
                 Text = _cfg.GroupAliases.TryGetValue(group, out var alias) ? alias : "",
-                Width = 260,
-                HorizontalAlignment = HorizontalAlignment.Left,
-                Margin = new Thickness(36, 0, 0, 8),
+                VerticalAlignment = VerticalAlignment.Center,
             };
+            ToolTipService.SetToolTip(renameBox, "Category name");
+            var rename = renameBox;
             OnCommit(rename, () =>
             {
                 string v = rename.Text.Trim();
@@ -87,14 +86,24 @@ namespace WinMonitor.UI
                 Apply();
             });
 
+            // the category name sits in the same columns as the rows below it
+            var nameRow = new Grid { ColumnSpacing = 8, MinHeight = 40, Padding = new Thickness(0, 2, 4, 2) };
+            nameRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(28) });
+            nameRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(32) });
+            nameRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            nameRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });
+            AddAt(nameRow, new FontIcon { Glyph = "\uE8AC", FontSize = 16, Foreground = Ui.Res("TextFillColorSecondaryBrush"), HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center }, 1);
+            AddAt(nameRow, renameBox, 2);
+            AddAt(nameRow, new TextBlock { Text = "Category", Foreground = Ui.Res("TextFillColorSecondaryBrush"), VerticalAlignment = VerticalAlignment.Center }, 3);
+
             var inner = new StackPanel { Spacing = 0 };
-            inner.Children.Add(rename);
+            inner.Children.Add(nameRow);
             if (!SystemBattery.Present && items.Exists(i => SystemBattery.IsLaptopRow(i.Key)))
                 inner.Children.Add(new InfoBar
                 {
                     IsOpen = true, IsClosable = false, Severity = InfoBarSeverity.Informational,
                     Message = "No laptop battery found on this PC, so the laptop battery rows are hidden.",
-                    Margin = new Thickness(36, 0, 0, 8),
+                    Margin = new Thickness(36, 4, 4, 8),
                 });
             inner.Children.Add(rows);
             // a Control, so switching the category off disables everything inside it
@@ -184,7 +193,7 @@ namespace WinMonitor.UI
                 bar.Click += (_, _) => { item.ShowBar = bar.IsChecked == true; Apply(); };
             }
 
-            var row = new Grid { ColumnSpacing = 8, MinHeight = 44, Padding = new Thickness(0, 2, 4, 2), Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
+            var row = new Grid { ColumnSpacing = 8, MinHeight = 40, Padding = new Thickness(0, 2, 4, 2), Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                       // handle
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(32) });                    // show
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });  // name

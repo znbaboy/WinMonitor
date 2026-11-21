@@ -47,6 +47,7 @@ namespace WinMonitor.UI
                     ImageSource = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "logo.png"))),
                 },
             };
+            Bar.Height = 48;   // same height as the tall caption buttons, so pages never slide under them
             Shell.Children.Add(Bar);
             SetTitleBar(Bar);
             _windowTitle = title;

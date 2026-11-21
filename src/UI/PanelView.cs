@@ -151,21 +151,23 @@ namespace WinMonitor.UI
             var L = t.Layout;
             float s = L.LayoutScale <= 0 ? 1f : L.LayoutScale;
 
-            int innerPad = (int)(10 * s), innerPadTotal = innerPad * 2;
+            int innerPad = Math.Max((int)(12 * s), L.GroupPadding), innerPadTotal = innerPad * 2;
             int barMinH = (int)(4 * s);
             int x = L.Padding - 1;   // LiteMonitor's visual compensation
             int y = L.Padding;
             int w = L.Width - L.Padding * 2;
             int rowH = L.RowHeight;
-            int textH = (int)(rowH * 0.60);                         // a row's text line
-            int barH = Math.Max(barMinH, (int)(rowH * 0.20));       // its bar, right under the text
-            int barGap = Math.Max(1, (int)(2 * s));
-            int rowGap = rowH - (textH + barGap + barH) + L.ItemGap; // same pitch as before for rows with a bar
+            // clean layout: the category name inside its card, then rows of text with a thin bar right under
+            int textH = (int)(rowH * 0.50);                         // a row's text line
+            int barH = Math.Max((int)(3 * s), (int)(rowH * 0.11));  // thin bar under the text
+            int barGap = Math.Max(2, (int)(3 * s));
+            int rowGap = Math.Max(4, (int)(rowH * 0.24));           // the same gap after every row
             int groupLineH = LineH(t.Font.Group);
+            int headerH = groupLineH + (int)(6 * s);                // category name line inside the card
+            int cardGap = Math.Max((int)(6 * s), L.GroupSpacing - groupLineH - L.GroupTitleOffset) + L.GroupBottom;
             bool hasTitle = showTitle && !string.IsNullOrEmpty(title);
 
             if (hasTitle) y += rowH + L.Padding;
-            else y += groupLineH + L.GroupTitleOffset + (int)(4 * s);   // room for the first group's title
 
             // pass 1: layout
             var groupRects = new List<Rect>();
@@ -175,7 +177,7 @@ namespace WinMonitor.UI
                 var g = groups[idx];
                 bool twoCol = g.GroupName is "NET" or "DISK" or "DATA";
                 int gp = L.GroupPadding;
-                int itemY = y + gp;
+                int itemY = y + gp + headerH;
                 if (twoCol) itemY += L.ItemGap / 2;
                 int startY = itemY;
                 var buffer = new List<MetricItem>();
@@ -223,9 +225,9 @@ namespace WinMonitor.UI
 
                 int content = itemY - startY;
                 if (!twoCol && content > 0) content -= lastGap;
-                int groupH = gp * 2 + content;
+                int groupH = gp * 2 + headerH + content;
                 groupRects.Add(new Rect(x, y, w, groupH));
-                y += idx < groups.Count - 1 ? groupH + L.GroupSpacing + L.GroupBottom : groupH;
+                y += idx < groups.Count - 1 ? groupH + cardGap : groupH;
             }
             int height = y + L.Padding;
 
@@ -239,6 +241,7 @@ namespace WinMonitor.UI
 
             var groupBg = Brush(t.Color.GroupBackground);
             var primary = ThemeManager.ParseColor(t.Color.TextPrimary);
+            var labelColor = Color.FromArgb(0xCC, primary.R, primary.G, primary.B);   // names a step quieter than values
             var barBg = Brush(t.Color.BarBackground);
             bool narrow = L.Width < 240 * s;
             for (int gi = 0; gi < groups.Count; gi++)
@@ -248,9 +251,7 @@ namespace WinMonitor.UI
                 Box(gr, L.GroupRadius, groupBg);
 
                 int gp = L.GroupPadding;
-                int titleY = (int)gr.Y - L.GroupTitleOffset - groupLineH;
-                int extraH = (int)(8 * s);
-                var rt = new Rect(gr.X + gp, Math.Max(0, titleY - extraH / 2), Math.Max(0, gr.Width - gp * 2), groupLineH + extraH);
+                var rt = new Rect(gr.X + innerPad, gr.Y + gp, Math.Max(0, gr.Width - innerPadTotal), groupLineH);
                 Place(Text(string.IsNullOrEmpty(g.Label) ? g.GroupName : g.Label, t.Font.Group, false, ThemeManager.ParseColor(t.Color.TextGroup)),
                       rt, HorizontalAlignment.Left, VerticalAlignment.Center);
 
@@ -285,7 +286,7 @@ namespace WinMonitor.UI
                             break;
 
                         default:
-                            v.Label = Text(label, t.Font.Item, false, primary);
+                            v.Label = Text(label, t.Font.Item, false, labelColor);
                             v.Value = Text(it.GetFormattedText(false), t.Font.Value, true, stateColor);
                             Place(v.Label, r.label, HorizontalAlignment.Left, VerticalAlignment.Center);
                             Place(v.Value, r.value, HorizontalAlignment.Right, VerticalAlignment.Center);

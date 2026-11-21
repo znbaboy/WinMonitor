@@ -173,13 +173,11 @@ namespace WinMonitor.UI
             for (int idx = 0; idx < groups.Count; idx++)
             {
                 var g = groups[idx];
-                bool isDash = g.GroupName.Equals("DASH", StringComparison.OrdinalIgnoreCase);
                 bool twoCol = g.GroupName is "NET" or "DISK" or "DATA";
-                int gp = isDash ? Math.Max(2, L.GroupPadding / 2) : L.GroupPadding;
+                int gp = L.GroupPadding;
                 int itemY = y + gp;
                 if (twoCol) itemY += L.ItemGap / 2;
                 int startY = itemY;
-                int listRowH = (int)(rowH * 0.8);
                 var buffer = new List<MetricItem>();
                 int lastGap = 0;
 
@@ -201,15 +199,7 @@ namespace WinMonitor.UI
 
                 foreach (var it in g.Items)
                 {
-                    if (isDash)
-                    {
-                        Flush();
-                        it.Style = MetricRenderStyle.TextOnly;
-                        var inner = new Rect(x + innerPad, itemY, w - innerPadTotal, listRowH);
-                        itemRects[it] = (inner, inner, Rect.Empty, new Rect(x, itemY, w, listRowH));
-                        itemY += listRowH;
-                    }
-                    else if (twoCol)
+                    if (twoCol)
                     {
                         buffer.Add(it);
                         if (buffer.Count >= 2) Flush();
@@ -220,7 +210,7 @@ namespace WinMonitor.UI
                         // so rows with and without a bar space out evenly
                         Flush();
                         it.Style = MetricRenderStyle.StandardBar;
-                        bool withBar = it.BoundConfig == null || it.BoundConfig.ShowBar;
+                        bool withBar = it.BoundConfig == null || (it.BoundConfig.ShowBar && it.BoundConfig.HasBar);
                         int h = withBar ? textH + barGap + barH : textH;
                         var top = new Rect(x + innerPad, itemY, w - innerPadTotal, textH);
                         var bar = withBar ? new Rect(top.X, itemY + textH + barGap, top.Width, barH) : Rect.Empty;
@@ -232,7 +222,7 @@ namespace WinMonitor.UI
                 Flush();
 
                 int content = itemY - startY;
-                if (!isDash && !twoCol && content > 0) content -= lastGap;
+                if (!twoCol && content > 0) content -= lastGap;
                 int groupH = gp * 2 + content;
                 groupRects.Add(new Rect(x, y, w, groupH));
                 y += idx < groups.Count - 1 ? groupH + L.GroupSpacing + L.GroupBottom : groupH;

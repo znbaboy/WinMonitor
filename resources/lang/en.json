@@ -2,14 +2,12 @@
   "Title": "⚡️WinMonitor",
   "Groups": {
     "HALO": "🔋Battery",
-    "DASH": "ℹ️Dashboard",
     "CPU": "💻CPU",
     "GPU": "🎮GPU",
     "HOST": "🖥️Host",
     "DISK": "💽Disk",
     "NET": "🌐Net",
-    "DATA": "📈Traffic",
-    "BAT": "🔋Battery"
+    "DATA": "📈Traffic"
   },
   "Items": {
     "HALO.Mouse": "Mouse",

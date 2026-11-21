@@ -203,33 +203,33 @@ if ($p) {
       if (Test-Path "$Data\WinMonitor_Trace.log") { Get-Content "$Data\WinMonitor_Trace.log" | Select-Object -First 15 | ForEach-Object { Write-Host "TRACE $_" } } else { Write-Host 'TRACE: no trace written (press never reached the handle)' }
       if ($host1 -gt $time1) { Ok 'drag to reorder rows' } else { Fail 'drag to reorder rows did not change the order' }
       Shot $win 'settings-items-dragged' 0 $true
-      # drag the expanded Devices category up above Dashboard
-      $ua = Find-Handle 'HALO'; $ub = Find-Handle 'DASH'
+      # drag the expanded CPU category up above Battery (the first category)
+      $ua = Find-Handle 'CPU'; $ub = Find-Handle 'HALO'
       if ($ua -and $ub) {
         $r1 = $ua.Current.BoundingRectangle; $r2 = $ub.Current.BoundingRectangle
         Drag-MouseY ([int]($r1.X + $r1.Width / 2)) ([int]($r1.Y + $r1.Height / 2)) ([int]($r2.Y - 4))
         Start-Sleep -Milliseconds 900   # settings are written 0.4 s after the last change
         $json = Get-Content "$Dir\settings.json" -Raw | ConvertFrom-Json
-        $d = ($json.MonitorItems | Where-Object Key -eq 'DASH.Uptime').SortIndex; $h = ($json.MonitorItems | Where-Object Key -eq 'HALO.Mouse').SortIndex
-        Write-Host "DRAG CATEGORY UP: DASH.Uptime=$d HALO.Mouse=$h"
+        $c = ($json.MonitorItems | Where-Object Key -eq 'CPU.Load').SortIndex; $h = ($json.MonitorItems | Where-Object Key -eq 'HALO.Mouse').SortIndex
+        Write-Host "DRAG CATEGORY UP: CPU.Load=$c HALO.Mouse=$h"
         Shot $win 'settings-items-category-up' 0 $true
-        if ($h -lt $d) { Ok 'drag an expanded category up' } else { Fail 'drag an expanded category up did not change the order' }
+        if ($c -lt $h) { Ok 'drag an expanded category up' } else { Fail 'drag an expanded category up did not change the order' }
       } else { Fail 'category handles not found (up)' }
 
-      # collapse all, then drag Devices back below Dashboard
+      # collapse all, then drag CPU back below Battery
       $cc = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, 'Collapse all')
       $btn = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cc)
       if ($btn) { $btn.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke(); Start-Sleep 2 }
-      $ca = Find-Handle 'HALO'; $cb = Find-Handle 'DASH'
+      $ca = Find-Handle 'CPU'; $cb = Find-Handle 'HALO'
       if ($ca -and $cb) {
         $r1 = $ca.Current.BoundingRectangle; $r2 = $cb.Current.BoundingRectangle
         Drag-Mouse ([int]($r1.X + $r1.Width / 2)) ([int]($r1.Y + $r1.Height / 2)) ([int]($r2.Y + $r2.Height + 12))
         Start-Sleep -Milliseconds 900   # settings are written 0.4 s after the last change
         $json = Get-Content "$Dir\settings.json" -Raw | ConvertFrom-Json
-        $d = ($json.MonitorItems | Where-Object Key -eq 'DASH.Uptime').SortIndex; $h = ($json.MonitorItems | Where-Object Key -eq 'HALO.Mouse').SortIndex
-        Write-Host "DRAG CATEGORY DOWN: DASH.Uptime=$d HALO.Mouse=$h"
+        $c = ($json.MonitorItems | Where-Object Key -eq 'CPU.Load').SortIndex; $h = ($json.MonitorItems | Where-Object Key -eq 'HALO.Mouse').SortIndex
+        Write-Host "DRAG CATEGORY DOWN: CPU.Load=$c HALO.Mouse=$h"
         Shot $win 'settings-items-category-dragged' 0 $true
-        if ($d -lt $h) { Ok 'drag a collapsed category down' } else { Fail 'drag a collapsed category down did not change the order' }
+        if ($c -gt $h) { Ok 'drag a collapsed category down' } else { Fail 'drag a collapsed category down did not change the order' }
       } else { Fail 'category handles not found' }
     }
   } catch { Fail "drag test: $_" }

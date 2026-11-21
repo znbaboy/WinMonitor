@@ -55,6 +55,18 @@ namespace WinMonitor
             if (s.DisabledGroups.Remove("BAT"))   // 1.0.0 had a separate Battery category: keep it hidden by unticking its rows
                 foreach (var it in s.MonitorItems) if (SystemBattery.IsLaptopRow(it.Key)) it.VisibleInPanel = false;
             s.GroupAliases.Remove("BAT");
+            if (s.LayoutVersion < 2)   // 1.0.2 and older had a Dashboard category: its rows now close the Host category
+            {
+                bool dashOff = s.DisabledGroups.Remove("DASH");
+                s.GroupAliases.Remove("DASH");
+                int last = s.MonitorItems.Where(i => i.UIGroup == "HOST" && !i.Key.StartsWith("DASH.")).Select(i => i.SortIndex).DefaultIfEmpty(400).Max();
+                foreach (var it in s.MonitorItems.Where(i => i.Key.StartsWith("DASH.")).OrderBy(i => i.SortIndex).ToList())
+                {
+                    it.SortIndex = ++last;
+                    if (dashOff) it.VisibleInPanel = false;
+                }
+                s.LayoutVersion = 2;
+            }
             if (s.Skin != ThemeManager.SystemMode && !ThemeManager.IsBuiltIn(s.Skin) && !File.Exists(Path.Combine(ThemeManager.ThemeDir, s.Skin + ".json")))
                 s.Skin = ThemeManager.SystemMode;                                                 // theme file missing: follow Windows
 
@@ -149,10 +161,10 @@ namespace WinMonitor
             {
                 // Dashboard Items
                 // Dashboard items go to the end by default (SortIndex > 800)
-                new MonitorItemConfig { Key = "DASH.HOST", SortIndex = 101, VisibleInPanel = false, TaskbarLabel = " " },
-                new MonitorItemConfig { Key = "DASH.Time", SortIndex = 102, VisibleInPanel = false, TaskbarLabel = " " },
-                new MonitorItemConfig { Key = "DASH.Uptime", SortIndex = 103, VisibleInPanel = true, TaskbarLabel = " " },
-                new MonitorItemConfig { Key = "DASH.IP",   SortIndex = 104, VisibleInPanel = false, TaskbarLabel = " " },
+                new MonitorItemConfig { Key = "DASH.HOST", SortIndex = 405, VisibleInPanel = false, TaskbarLabel = " " },
+                new MonitorItemConfig { Key = "DASH.Time", SortIndex = 406, VisibleInPanel = false, TaskbarLabel = " " },
+                new MonitorItemConfig { Key = "DASH.Uptime", SortIndex = 407, VisibleInPanel = true, TaskbarLabel = " " },
+                new MonitorItemConfig { Key = "DASH.IP",   SortIndex = 408, VisibleInPanel = false, TaskbarLabel = " " },
 
                 // wireless device batteries, one row per device type
                 new MonitorItemConfig { Key = "HALO.Mouse",      SortIndex = 151, VisibleInPanel = true },

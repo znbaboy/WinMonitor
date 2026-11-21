@@ -12,7 +12,8 @@ namespace WinMonitor
         public bool TopMost { get; set; } = false;
         public bool AutoStart { get; set; } = false;
         public bool CheckForUpdates { get; set; } = true;
-        public bool MonochromeEmoji { get; set; } = false;         // category emojis drawn in the text colour
+        public bool MonochromeEmoji { get; set; } = false;
+        public int LayoutVersion { get; set; } = 0;                // one-time moves of rows between categories         // category emojis drawn in the text colour
         public bool ColorClockSpeeds { get; set; } = true;         // clock values turn yellow / red near their maximum          // once a day, a tray notification when a new version is out
         public DateTime LastUpdateCheckUtc { get; set; }
         public int RefreshMs { get; set; } = 1000;
@@ -186,7 +187,7 @@ namespace WinMonitor
                     CachedUIGroup = "HOST"; 
                 else if (_key.StartsWith("DASH."))
                 {
-                    CachedUIGroup = "DASH";
+                    CachedUIGroup = "HOST";   // hostname, time, uptime and IP sit with the other PC rows
                     string sub = _key.Substring(5);
                     CachedDashColorKey = UIUtils.Intern(sub + ".Color");
                     CachedDashUnitKey = UIUtils.Intern(sub + ".Unit");
@@ -224,10 +225,10 @@ namespace WinMonitor
         // draw the bar under this item (only matters when HasBar)
         public bool ShowBar { get; set; } = true;
 
-        /// <summary>[Bars] Whether the panel draws a bar for this item: the Dashboard, network,
-        /// disk and traffic rows are text only.</summary>
+        /// <summary>[Bars] Whether the panel draws a bar for this item: hostname, time, uptime, IP,
+        /// network, disk and traffic rows are text only.</summary>
         [JsonIgnore]
-        public bool HasBar => UIGroup is not ("DASH" or "NET" or "DISK" or "DATA");
+        public bool HasBar => !Key.StartsWith("DASH.") && UIGroup is not ("NET" or "DISK" or "DATA");
 
         public int SortIndex { get; set; } = 0;
 
@@ -253,7 +254,7 @@ namespace WinMonitor
                 
                 if (Key.StartsWith("DASH."))
                 {
-                    return "DASH";
+                    return "HOST";
                 }
 
                 return Key.Split('.')[0]; 

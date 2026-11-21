@@ -181,7 +181,7 @@ $env:WINMONITOR_EXPAND_ALL = '1'; $env:WINMONITOR_TRACE = '1'
 $p = Start-App '{ "DisabledGroups": ["GPU"] }' @('--open', 'settings:Items')
 if ($p) { Window $p 'Settings - WinMonitor' 'settings-items-expanded' 900 1000 }
 if ($p) {
-  # drag the DASH.HOST row below DASH.Time with the real mouse, then check the saved order
+  # drag the Mouse row below Keyboard (first category, on screen) with the real mouse, then check the saved order
   try {
     Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
     $win = [W]::Find([uint32]$p.Id, 'Settings - WinMonitor', $false) | Select-Object -First 1
@@ -190,16 +190,16 @@ if ($p) {
       $c = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, "Move $n")
       $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $c)
     }
-    $a = Find-Handle 'DASH.HOST'; $b = Find-Handle 'DASH.Time'
+    $a = Find-Handle 'HALO.Mouse'; $b = Find-Handle 'HALO.Keyboard'
     if (-not $a -or -not $b) { Fail 'drag test: handles not found' }
     else {
       $ra = $a.Current.BoundingRectangle; $rb = $b.Current.BoundingRectangle
       Drag-Mouse ([int]($ra.X + $ra.Width / 2)) ([int]($ra.Y + $ra.Height / 2)) ([int]($rb.Y + $rb.Height + 8))
       Start-Sleep -Milliseconds 900   # settings are written 0.4 s after the last change
       $json = Get-Content "$Dir\settings.json" -Raw | ConvertFrom-Json
-      $host1 = ($json.MonitorItems | Where-Object Key -eq 'DASH.HOST').SortIndex
-      $time1 = ($json.MonitorItems | Where-Object Key -eq 'DASH.Time').SortIndex
-      Write-Host "DRAG: DASH.HOST=$host1 DASH.Time=$time1"
+      $host1 = ($json.MonitorItems | Where-Object Key -eq 'HALO.Mouse').SortIndex
+      $time1 = ($json.MonitorItems | Where-Object Key -eq 'HALO.Keyboard').SortIndex
+      Write-Host "DRAG: HALO.Mouse=$host1 HALO.Keyboard=$time1"
       if (Test-Path "$Data\WinMonitor_Trace.log") { Get-Content "$Data\WinMonitor_Trace.log" | Select-Object -First 15 | ForEach-Object { Write-Host "TRACE $_" } } else { Write-Host 'TRACE: no trace written (press never reached the handle)' }
       if ($host1 -gt $time1) { Ok 'drag to reorder rows' } else { Fail 'drag to reorder rows did not change the order' }
       Shot $win 'settings-items-dragged' 0 $true
@@ -210,7 +210,7 @@ if ($p) {
         Drag-MouseY ([int]($r1.X + $r1.Width / 2)) ([int]($r1.Y + $r1.Height / 2)) ([int]($r2.Y - 4))
         Start-Sleep -Milliseconds 900   # settings are written 0.4 s after the last change
         $json = Get-Content "$Dir\settings.json" -Raw | ConvertFrom-Json
-        $c = ($json.MonitorItems | Where-Object Key -eq 'CPU.Load').SortIndex; $h = ($json.MonitorItems | Where-Object Key -eq 'HALO.Mouse').SortIndex
+        $c = ($json.MonitorItems | Where-Object Key -eq 'CPU.Load').SortIndex; $h = ($json.MonitorItems | Where-Object Key -eq 'HALO.Keyboard').SortIndex
         Write-Host "DRAG CATEGORY UP: CPU.Load=$c HALO.Mouse=$h"
         Shot $win 'settings-items-category-up' 0 $true
         if ($c -lt $h) { Ok 'drag an expanded category up' } else { Fail 'drag an expanded category up did not change the order' }

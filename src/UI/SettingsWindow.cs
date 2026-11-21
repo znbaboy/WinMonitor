@@ -21,20 +21,26 @@ namespace WinMonitor.UI
 
         private static string T(string key) => LanguageManager.T(key);
 
-        public SettingsWindow(AppHost app) : base(T("Menu.SettingsPanel") + " - WinMonitor", 900, 720)
+        public SettingsWindow(AppHost app) : base(T("Menu.SettingsPanel") + " - WinMonitor", 1000, 760)
         {
             _app = app;
             _cfg = app.Cfg;
             Closed += (_, _) => _app.FlushSettings();
 
+            // Windows 11 Settings layout: sidebar on Mica (no pane fill), app card on top, search box, pages on a layer
             _nav = new NavigationView
             {
                 PaneDisplayMode = NavigationViewPaneDisplayMode.Left,
                 IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed,
                 IsSettingsVisible = false,
                 IsPaneToggleButtonVisible = false,
-                OpenPaneLength = 220,
+                OpenPaneLength = 280,
+                PaneHeader = AppCard(),
+                AutoSuggestBox = SearchBox(),
             };
+            var clear = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            _nav.Resources["NavigationViewDefaultPaneBackground"] = clear;
+            _nav.Resources["NavigationViewExpandedPaneBackground"] = clear;
             void Add(string key, string text, string glyph, Func<UIElement> page)
             {
                 _pages[key] = page;
@@ -51,6 +57,58 @@ namespace WinMonitor.UI
             };
             SetBody(_nav);
             ShowPage("Panel");
+        }
+
+        /// <summary>The sidebar's top card (like the account card in Windows Settings).</summary>
+        private static FrameworkElement AppCard()
+        {
+            var card = new Grid { ColumnSpacing = 12, Margin = new Thickness(16, 4, 16, 12) };
+            card.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            card.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            var logo = new Image
+            {
+                Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "logo.png"))),
+                Width = 56, Height = 56,
+            };
+            var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            text.Children.Add(new TextBlock { Text = "WinMonitor", Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] });
+            text.Children.Add(new TextBlock { Text = "Version " + AppInfo.Version, Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"], Foreground = Ui.Res("TextFillColorSecondaryBrush") });
+            Grid.SetColumn(text, 1);
+            card.Children.Add(logo);
+            card.Children.Add(text);
+            return card;
+        }
+
+        /// <summary>"Find a setting": suggests settings by name and opens their page.</summary>
+        private AutoSuggestBox SearchBox()
+        {
+            (string Name, string Page)[] index =
+            {
+                ("Theme", "Panel"), ("Theme editor", "Panel"), ("Width", "Panel"), ("Scale", "Panel"), ("Opacity", "Panel"),
+                ("Show category names", "Panel"), ("Monochrome emoji", "Panel"), ("Always on top", "Panel"), ("Keep on screen", "Panel"),
+                ("Click-through", "Panel"), ("Double-click", "Panel"), ("Hide panel", "Panel"), ("Devices", "Panel"),
+                ("Monitor items", "Items"), ("Rename a row", "Items"), ("Bars", "Items"), ("Categories", "Items"),
+                ("Temperature alert", "Alerts"), ("Battery alert", "Alerts"), ("Colour clock speeds", "Alerts"), ("Colours", "Alerts"),
+                ("Start with Windows", "Hardware"), ("Hide tray icon", "Hardware"), ("Refresh rate", "Hardware"), ("Memory", "Hardware"),
+                ("Windows performance counters", "Hardware"), ("Sensor sources", "Hardware"), ("Calibration", "Hardware"),
+                ("Check for updates", "About"), ("PawnIO driver", "About"), ("Reset", "About"), ("Licences", "About"),
+            };
+            var box = new AutoSuggestBox { PlaceholderText = "Find a setting", QueryIcon = new SymbolIcon(Symbol.Find) };
+            box.TextChanged += (s, e) =>
+            {
+                if (e.Reason != AutoSuggestionBoxTextChangeReason.UserInput) return;
+                string q = s.Text.Trim();
+                s.ItemsSource = q.Length == 0 ? null : index.Where(i => i.Name.Contains(q, StringComparison.OrdinalIgnoreCase)).Select(i => i.Name).ToList();
+            };
+            void Go(string? text)
+            {
+                var hit = index.FirstOrDefault(i => string.Equals(i.Name, text, StringComparison.OrdinalIgnoreCase));
+                if (hit.Page == null) hit = index.FirstOrDefault(i => text != null && i.Name.Contains(text, StringComparison.OrdinalIgnoreCase));
+                if (hit.Page != null) ShowPage(hit.Page);
+            }
+            box.SuggestionChosen += (_, e) => Go(e.SelectedItem as string);
+            box.QuerySubmitted += (_, e) => Go(e.ChosenSuggestion as string ?? e.QueryText);
+            return box;
         }
 
         public void ShowPage(string key)

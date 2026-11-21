@@ -20,7 +20,7 @@ namespace WinMonitor.UI
     {
         public IntPtr Hwnd { get; }
         protected Grid Shell { get; } = new();
-        private readonly TextBlock _title;
+        protected TitleBar Bar { get; }
 
         protected ToolWindow(string title, int widthDip, int heightDip)
         {
@@ -31,19 +31,21 @@ namespace WinMonitor.UI
             AppWindow.SetIcon(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "app.ico"));
 
             ExtendsContentIntoTitleBar = true;
-            Shell.RowDefinitions.Add(new RowDefinition { Height = new GridLength(40) });
+            Shell.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             Shell.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            var bar = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
-            _title = new TextBlock
+            // the Windows 11 title bar control: app icon and title, drag area, caption buttons spacing
+            Bar = new TitleBar
             {
-                Text = title,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(16, 0, 0, 0),
-                Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+                Title = title.Replace(" - WinMonitor", ""),
+                Subtitle = title.Contains(" - WinMonitor") ? "WinMonitor" : null,
+                IconSource = new ImageIconSource
+                {
+                    ImageSource = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "logo.png"))),
+                },
             };
-            bar.Children.Add(_title);
-            Shell.Children.Add(bar);
-            SetTitleBar(bar);
+            Shell.Children.Add(Bar);
+            SetTitleBar(Bar);
+            AppWindow.TitleBar.PreferredHeightOption = Microsoft.UI.Windowing.TitleBarHeightOption.Tall;
 
             if (MicaController.IsSupported()) SystemBackdrop = new MicaBackdrop();
             else Shell.Background = (Brush)Application.Current.Resources["SolidBackgroundFillColorBaseBrush"];
@@ -94,7 +96,7 @@ namespace WinMonitor.UI
 
         public static ScrollViewer Page(params UIElement[] children)
         {
-            var stack = new StackPanel { Spacing = 4, Margin = new Thickness(24, 8, 24, 24), MaxWidth = 1000 };
+            var stack = new StackPanel { Spacing = 4, Margin = new Thickness(36, 12, 36, 36), MaxWidth = 1000 };
             foreach (var c in children) stack.Children.Add(c);
             return new ScrollViewer { Content = stack, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         }

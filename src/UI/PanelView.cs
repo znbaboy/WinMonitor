@@ -165,7 +165,7 @@ namespace WinMonitor.UI
             int groupLineH = LineH(t.Font.Group);
             int headerGap = (int)(7 * s);                           // space above and below the divider
             int headerH = groupLineH + headerGap * 2 + 1;           // category name, divider, then the rows
-            int cardGap = Math.Max((int)(6 * s), L.GroupSpacing - groupLineH - L.GroupTitleOffset) + L.GroupBottom;
+            int cardGap = (int)(Math.Clamp(Settings.Load().CategorySpacing, 0, 200) * s) + L.GroupBottom;   // Settings > Panel
             bool hasTitle = showTitle && !string.IsNullOrEmpty(title);
 
             if (hasTitle) y += rowH + L.Padding;

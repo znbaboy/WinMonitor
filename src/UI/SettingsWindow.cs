@@ -84,7 +84,7 @@ namespace WinMonitor.UI
         {
             (string Name, string Page)[] index =
             {
-                ("Theme", "Panel"), ("Theme editor", "Panel"), ("Width", "Panel"), ("Scale", "Panel"), ("Opacity", "Panel"),
+                ("Theme", "Panel"), ("Theme editor", "Panel"), ("Width", "Panel"), ("Category spacing", "Panel"), ("Scale", "Panel"), ("Opacity", "Panel"),
                 ("Show category names", "Panel"), ("Monochrome emoji", "Panel"), ("Always on top", "Panel"), ("Keep on screen", "Panel"),
                 ("Click-through", "Panel"), ("Double-click", "Panel"), ("Hide panel", "Panel"), ("Devices", "Panel"),
                 ("Monitor items", "Items"), ("Rename a row", "Items"), ("Bars", "Items"), ("Categories", "Items"),
@@ -136,6 +136,8 @@ namespace WinMonitor.UI
                 Ui.LinkRow(T("Menu.ThemeEditor"), _app.OpenThemeEditor, "Make your own colours, fonts and spacing", "\uE70F"),
                 Ui.Row(T("Menu.Width"), Ui.NumberUnit(c.PanelWidth, 100, 10000, "px",
                     v => { c.PanelWidth = (int)v; Save(); _app.ApplyThemeAndLayout(retainData: true); }, 10), null, "\uE740"),
+                Ui.Row("Category spacing", Ui.NumberUnit(c.CategorySpacing, 0, 200, "px",
+                    v => { c.CategorySpacing = (int)v; Save(); _app.ApplyThemeAndLayout(retainData: true); }), "Space between the category cards", "\uE9A6"),
                 Ui.Row(T("Menu.Scale"), Ui.NumberUnit(Math.Round(c.UIScale * 100), 10, 1000, "%",
                     v => { c.UIScale = v / 100.0; Save(); _app.ApplyThemeAndLayout(retainData: true); }, 5), null, "\uE8A3"),
                 Ui.Row(T("Menu.Opacity"), Ui.Combo(opacities.Select(o => $"{o * 100:0}%"), Array.FindIndex(opacities, o => Math.Abs(o - c.Opacity) < 0.01),

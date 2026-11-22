@@ -13,6 +13,7 @@ namespace WinMonitor
         public bool AutoStart { get; set; } = false;
         public bool CheckForUpdates { get; set; } = true;
         public bool MonochromeEmoji { get; set; } = false;
+        public int CategorySpacing { get; set; } = 8;              // px between category cards (before scaling)
         public int LayoutVersion { get; set; } = 0;                // one-time moves of rows between categories         // category emojis drawn in the text colour
         public bool ColorClockSpeeds { get; set; } = true;         // 1.0.x setting, moved into UncoloredKinds on load
         public List<string> UncoloredKinds { get; set; } = new();  // kinds of values that never turn yellow / red

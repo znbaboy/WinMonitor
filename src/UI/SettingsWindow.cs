@@ -88,7 +88,7 @@ namespace WinMonitor.UI
                 ("Show category names", "Panel"), ("Monochrome emoji", "Panel"), ("Always on top", "Panel"), ("Keep on screen", "Panel"),
                 ("Click-through", "Panel"), ("Double-click", "Panel"), ("Hide panel", "Panel"), ("Devices", "Panel"),
                 ("Monitor items", "Items"), ("Rename a row", "Items"), ("Bars", "Items"), ("Categories", "Items"),
-                ("Temperature alert", "Alerts"), ("Battery alert", "Alerts"), ("Colour clock speeds", "Alerts"), ("Colours", "Alerts"),
+                ("Temperature alert", "Alerts"), ("Battery alert", "Alerts"), ("Warning colours", "Alerts"), ("Colours", "Alerts"),
                 ("Start with Windows", "Hardware"), ("Hide tray icon", "Hardware"), ("Refresh rate", "Hardware"), ("Memory", "Hardware"),
                 ("Windows performance counters", "Hardware"), ("Sensor sources", "Hardware"), ("Calibration", "Hardware"),
                 ("Check for updates", "About"), ("PawnIO driver", "About"), ("Reset", "About"), ("Licences", "About"),
@@ -223,8 +223,7 @@ namespace WinMonitor.UI
 
                 Ui.Section("Colours"),
                 Ui.Hint(T("Menu.ThresholdsTips")),
-                Ui.Row("Colour clock speeds", Ui.Toggle(c.ColorClockSpeeds, v => { c.ColorClockSpeeds = v; Save(); }),
-                    "Yellow and red when a CPU or GPU clock nears its maximum", "\uEC4A"),
+                ColourKindsGroup(c),
                 Ui.Row(T("Menu.HardwareLoad"), Threshold(c.Thresholds.Load, "%"), null, "\uE9D9"),
                 Ui.Row(T("Menu.HardwareTemp"), Threshold(c.Thresholds.Temp, "°C"), null, "\uE7BA"),
                 Ui.Row(T("Menu.DiskIOSpeed"), Threshold(c.Thresholds.DiskIOMB, "MB/s"), null, "\uEDA2"),
@@ -406,6 +405,34 @@ namespace WinMonitor.UI
                 Ui.Section(T("Menu.Reset")),
                 Ui.Row(T("Menu.Reset"), Ui.Button(T("Menu.Reset") + "…", ResetSettings), "Deletes settings.json and restarts WinMonitor with the defaults.", "\uE777")
             );
+        }
+
+        /// <summary>Warning colours: one tick per kind of value; unticked kinds always show in the normal colour.</summary>
+        private FrameworkElement ColourKindsGroup(Settings c)
+        {
+            var grid = new Grid { ColumnSpacing = 24, RowSpacing = 4, Padding = new Thickness(58, 12, 16, 12) };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            var kinds = MetricUtils.ColorKinds;
+            for (int i = 0; i < kinds.Length; i++)
+            {
+                var (kind, name) = kinds[i];
+                var box = new CheckBox { Content = name, IsChecked = c.IsColored(kind) };
+                box.Click += (_, _) =>
+                {
+                    c.UncoloredKinds.Remove(kind);
+                    if (box.IsChecked != true) c.UncoloredKinds.Add(kind);
+                    Save();
+                    _app.ApplyThemeAndLayout(retainData: true);
+                };
+                if (i / 2 >= grid.RowDefinitions.Count) grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                Grid.SetRow(box, i / 2);
+                Grid.SetColumn(box, i % 2);
+                grid.Children.Add(box);
+            }
+            var ex = Ui.Group("Warning colours", null, "Values turn yellow and red near their limits. Untick the ones that should stay plain.", "\uE790", grid);
+            ex.IsExpanded = true;
+            return ex;
         }
 
         /// <summary>WinMonitor version card: check, then download and install (sensor library and device support come with it).</summary>

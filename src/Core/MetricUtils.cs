@@ -319,6 +319,33 @@ namespace WinMonitor.Core
         // =========================================================
         // 4. Thresholds and states
         // =========================================================
+        /// <summary>The kinds of values whose warning colours can be switched off, with their names in Settings.</summary>
+        public static readonly (string Kind, string Name)[] ColorKinds =
+        {
+            ("Usage", "Usage"), ("Temperature", "Temperatures"), ("Clock", "Clock speeds"), ("Power", "Power"),
+            ("Voltage", "Voltage and current"), ("Fans", "Fan and pump speeds"), ("Memory", "Memory and VRAM"),
+            ("Speed", "Disk and network speed"), ("Traffic", "Daily traffic"), ("Battery", "Battery levels"),
+        };
+
+        /// <summary>Which of <see cref="ColorKinds"/> a row belongs to.</summary>
+        public static string ColorKind(string key)
+        {
+            if (key.StartsWith("BAT", StringComparison.OrdinalIgnoreCase) || key.StartsWith("HALO", StringComparison.OrdinalIgnoreCase)) return "Battery";
+            return GetType(key) switch
+            {
+                MetricType.Percent => "Usage",
+                MetricType.Temperature => "Temperature",
+                MetricType.Frequency => "Clock",
+                MetricType.Power => "Power",
+                MetricType.Voltage or MetricType.Current => "Voltage",
+                MetricType.RPM => "Fans",
+                MetricType.Memory => "Memory",
+                MetricType.DataSpeed => "Speed",
+                MetricType.DataSize => "Traffic",
+                _ => "Other",
+            };
+        }
+
         public static int GetState(string key, double value)
         {
             if (double.IsNaN(value)) return STATE_SAFE;
@@ -331,7 +358,7 @@ namespace WinMonitor.Core
             // are judged against their recorded maximum, not an absolute value:
             // e.g. a CPU clock at 90% of its maximum counts as high (red).
             // Otherwise 4.0 GHz might never reach a threshold.
-            if (type == MetricType.Frequency && !Settings.Load().ColorClockSpeeds) return STATE_SAFE;
+            if (!Settings.Load().IsColored(ColorKind(key))) return STATE_SAFE;   // this kind is switched to plain
             if (type is MetricType.Frequency or MetricType.Power or MetricType.RPM or MetricType.FPS or MetricType.Voltage or MetricType.Current)
             {
                  // Use GetAdaptivePercentage directly since we are already inside the adaptive type check block

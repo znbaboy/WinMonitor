@@ -14,7 +14,11 @@ namespace WinMonitor
         public bool CheckForUpdates { get; set; } = true;
         public bool MonochromeEmoji { get; set; } = false;
         public int LayoutVersion { get; set; } = 0;                // one-time moves of rows between categories         // category emojis drawn in the text colour
-        public bool ColorClockSpeeds { get; set; } = true;         // clock values turn yellow / red near their maximum          // once a day, a tray notification when a new version is out
+        public bool ColorClockSpeeds { get; set; } = true;         // 1.0.x setting, moved into UncoloredKinds on load
+        public List<string> UncoloredKinds { get; set; } = new();  // kinds of values that never turn yellow / red
+
+        /// <summary>Whether a kind of value (see MetricUtils.ColorKind) shows warning colours.</summary>
+        public bool IsColored(string kind) => !UncoloredKinds.Contains(kind);          // once a day, a tray notification when a new version is out
         public DateTime LastUpdateCheckUtc { get; set; }
         public int RefreshMs { get; set; } = 1000;
         public double AnimationSpeed { get; set; } = 0.35;

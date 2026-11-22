@@ -163,7 +163,8 @@ namespace WinMonitor.UI
             int barGap = Math.Max(2, (int)(3 * s));
             int rowGap = Math.Max(4, (int)(rowH * 0.24));           // the same gap after every row
             int groupLineH = LineH(t.Font.Group);
-            int headerH = groupLineH + (int)(6 * s);                // category name line inside the card
+            int headerGap = (int)(7 * s);                           // space above and below the divider
+            int headerH = groupLineH + headerGap * 2 + 1;           // category name, divider, then the rows
             int cardGap = Math.Max((int)(6 * s), L.GroupSpacing - groupLineH - L.GroupTitleOffset) + L.GroupBottom;
             bool hasTitle = showTitle && !string.IsNullOrEmpty(title);
 
@@ -252,6 +253,8 @@ namespace WinMonitor.UI
 
                 int gp = L.GroupPadding;
                 var rt = new Rect(gr.X + innerPad, gr.Y + gp, Math.Max(0, gr.Width - innerPadTotal), groupLineH);
+                var div = ThemeManager.ParseColor(t.Color.BarBackground);   // hairline under the category name
+                Box(new Rect(rt.X, rt.Y + groupLineH + headerGap, rt.Width, 1), 0, Brush(Color.FromArgb(160, div.R, div.G, div.B)));
                 Place(Text(string.IsNullOrEmpty(g.Label) ? g.GroupName : g.Label, t.Font.Group, false, ThemeManager.ParseColor(t.Color.TextGroup)),
                       rt, HorizontalAlignment.Left, VerticalAlignment.Center);
 

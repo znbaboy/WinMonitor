@@ -55,6 +55,7 @@ namespace WinMonitor
             if (s.DisabledGroups.Remove("BAT"))   // 1.0.0 had a separate Battery category: keep it hidden by unticking its rows
                 foreach (var it in s.MonitorItems) if (SystemBattery.IsLaptopRow(it.Key)) it.VisibleInPanel = false;
             s.GroupAliases.Remove("BAT");
+            if (!s.ColorClockSpeeds) { if (!s.UncoloredKinds.Contains("Clock")) s.UncoloredKinds.Add("Clock"); s.ColorClockSpeeds = true; }
             if (s.LayoutVersion < 2)   // 1.0.2 and older had a Dashboard category: its rows now close the Host category
             {
                 bool dashOff = s.DisabledGroups.Remove("DASH");

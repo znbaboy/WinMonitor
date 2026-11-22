@@ -100,7 +100,7 @@ namespace WinMonitor
             IsDirect = true;
             Label = label;
             TextValue = text;
-            CachedColorState = colorState;
+            CachedColorState = Settings.Load().IsColored(MetricUtils.ColorKind(Key)) ? colorState : 0;
             CachedPercent = Math.Clamp(percent, 0.0, 1.0);
         }
 

@@ -430,7 +430,15 @@ namespace WinMonitor.UI
                 Grid.SetColumn(box, i % 2);
                 grid.Children.Add(box);
             }
-            var ex = Ui.Group("Warning colours", null, "Values turn yellow and red near their limits. Untick the ones that should stay plain.", "\uE790", grid);
+            // expander items must be settings cards (they get the card style), so the ticks sit in one
+            grid.Padding = new Thickness(0);
+            var holder = new CommunityToolkit.WinUI.Controls.SettingsCard
+            {
+                Content = grid,
+                ContentAlignment = CommunityToolkit.WinUI.Controls.ContentAlignment.Left,
+                HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            };
+            var ex = Ui.Group("Warning colours", null, "Values turn yellow and red near their limits. Untick the ones that should stay plain.", "\uE790", holder);
             ex.IsExpanded = true;
             return ex;
         }

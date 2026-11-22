@@ -4,6 +4,11 @@ A small floating hardware monitor for Windows 11, with wireless device batteries
 
 **Install:** unzip `WinMonitor-portable-x64.zip` anywhere and run `WinMonitor.exe`. On 1.0.1 or later, install it from Settings > About > Check for updates.
 
+<p>
+<img src="https://raw.githubusercontent.com/znbaboy/WinMonitor/main/docs/screenshots/panel.png" width="22%" alt="Panel">
+<img src="https://raw.githubusercontent.com/znbaboy/WinMonitor/main/docs/screenshots/settings.png" width="76%" alt="Settings">
+</p>
+
 ## Look
 
 - Settings redesigned on the latest WinUI 3 (Windows App SDK 2.7): Windows 11 title bar, sidebar with an app card, **Find a setting** search, roomier pages

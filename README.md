@@ -17,9 +17,12 @@ Free and open source (MIT). Portable: unzip and run.
 ## Screenshots
 
 <p>
-<img src="docs/screenshots/monitor-items.png" width="49%" alt="Monitor Items">
-<img src="docs/screenshots/settings.png" width="49%" alt="Settings">
-<img alt="image" src="https://github.com/user-attachments/assets/7740cd78-1393-4518-aa3a-feb259198d71" width="10%" />
+<img src="docs/screenshots/panel.png" width="22%" alt="Panel">
+<img src="docs/screenshots/settings.png" width="76%" alt="Settings">
+</p>
+<p>
+<img src="docs/screenshots/monitor-items.png" width="49%" alt="Monitor items">
+<img src="docs/screenshots/alerts.png" width="49%" alt="Alerts and warning colours">
 </p>
 
 ## Install
